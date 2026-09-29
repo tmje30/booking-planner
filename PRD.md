@@ -64,7 +64,13 @@ only save bookings on each person's own computer, so we need shared storage.
   tools or frameworks unless there's a strong reason (explain it first).
 
 ## Answers to open questions
-- Layout (answered 2026-09-29): Calendar-style weeks that start on Monday.
+- Layout CHANGED (2026-09-29, later the same day): weeks now start on
+  TODAY, not Monday. Week 1 = today + next 6 days (today is always the
+  first column); Week 2 = the 7 days after. No greyed-out days any more.
+  A red "now" line shows the current time in today's column (in the
+  chosen zone) and moves every minute; the page opens scrolled to it.
+  The original answer below is kept for history.
+- Layout (answered 2026-09-29, superseded above): Calendar-style weeks that start on Monday.
   Days outside the rolling 14-day window are shown greyed out.
   The grid shows 1-hour lines; bookings snap to 15-minute steps when
   clicked or dragged, and can be moved freely.

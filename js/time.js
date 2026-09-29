@@ -76,17 +76,6 @@ function addDays(key, n) {
   return date.toISOString().slice(0, 10); // keep just "YYYY-MM-DD"
 }
 
-// Weekday of a day key, with Monday = 0 ... Sunday = 6.
-// (JavaScript normally counts Sunday = 0, so we shift it.)
-function weekdayMondayFirst(key) {
-  return (keyToCalendarDate(key).getUTCDay() + 6) % 7;
-}
-
-// The Monday on or before the given day key.
-function mondayOf(key) {
-  return addDays(key, -weekdayMondayFirst(key));
-}
-
 // Nice label for a day column, e.g. "Tue 29 Sep".
 function formatDayHeader(key) {
   return new Intl.DateTimeFormat("en-GB", {

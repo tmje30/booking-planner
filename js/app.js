@@ -50,14 +50,9 @@ function calculateCalendar() {
   const firstDay = todayKey(timeZone);                   // today
   const lastDay = addDays(firstDay, WINDOW_DAYS - 1);    // today + 13
 
-  // Collect the Monday of every week that contains at least one window day.
-  // Usually that's 3 weeks; on a Monday it's exactly 2.
-  const weekStarts = [];
-  for (let monday = mondayOf(firstDay); monday <= lastDay; monday = addDays(monday, 7)) {
-    weekStarts.push(monday);
-  }
-  // Note: comparing day keys with <= works because "YYYY-MM-DD" text sorts
-  // in the same order as the dates themselves.
+  // Two "weeks" of 7 days each, both rolling: week 1 starts today,
+  // week 2 starts 7 days from today. So today is always the first column.
+  const weekStarts = [firstDay, addDays(firstDay, 7)];
 
   return { firstDay, lastDay, weekStarts };
 }
@@ -68,38 +63,38 @@ function render() {
   const { firstDay, lastDay, weekStarts } = calculateCalendar();
   lastTodayKey = firstDay;
 
-  // Keep the week number inside the allowed range (the first week, the
-  // one containing today, is index 0).
+  // Keep the week number inside the allowed range (week 1, which starts
+  // today, is index 0).
   if (weekIndex === null) weekIndex = 0;
   weekIndex = Math.max(0, Math.min(weekIndex, weekStarts.length - 1));
 
-  const monday = weekStarts[weekIndex];
+  const weekStart = weekStarts[weekIndex];
+  const weekEnd = addDays(weekStart, 6);
 
   // Top bar: time zone status and week label/buttons.
   document.getElementById("zone-status").textContent =
     "Copenhagen is on " + zoneStatusText("CPH") + ". Singapore is " + zoneStatusText("SGT") + ".";
   document.getElementById("week-label").textContent =
-    "Week of " + formatDayHeader(monday) +
-    "  (" + (weekIndex + 1) + " of " + weekStarts.length + ")";
+    "Week " + (weekIndex + 1) + ": " + formatDayHeader(weekStart) + " – " + formatDayHeader(weekEnd);
   document.getElementById("prev-week").disabled = weekIndex === 0;
   document.getElementById("next-week").disabled = weekIndex === weekStarts.length - 1;
 
-  drawGrid(monday, firstDay, lastDay);
+  drawGrid(weekStart, firstDay, lastDay);
   drawBookings();
+  drawNowLine();
   fillDayOptions();
   updateNextDayHint();
 }
 
-// Which week (0, 1, 2...) contains the given day? Used to jump to a
-// booking's week after adding it.
+// Which week (0 = days 1–7, 1 = days 8–14) contains the given day? Used
+// to jump to a booking's week after adding it.
 function weekIndexOfDay(dayKey) {
-  const { weekStarts } = calculateCalendar();
-  const index = weekStarts.indexOf(mondayOf(dayKey));
-  return index === -1 ? 0 : index;
+  const { firstDay } = calculateCalendar();
+  return dayKey >= addDays(firstDay, 7) ? 1 : 0;
 }
 
 // Build the grid: a time column on the left and 7 day columns.
-function drawGrid(monday, firstDay, lastDay) {
+function drawGrid(weekStart, firstDay, lastDay) {
   const planner = document.getElementById("planner");
   planner.innerHTML = ""; // clear whatever was drawn before
 
@@ -109,7 +104,7 @@ function drawGrid(monday, firstDay, lastDay) {
   head.appendChild(document.createElement("div")); // empty corner above the hours
 
   const dayKeys = [];
-  for (let i = 0; i < 7; i++) dayKeys.push(addDays(monday, i));
+  for (let i = 0; i < 7; i++) dayKeys.push(addDays(weekStart, i));
 
   for (const key of dayKeys) {
     const cell = document.createElement("div");
@@ -155,6 +150,34 @@ function dayClasses(key, firstDay, lastDay) {
   if (key < firstDay || key > lastDay) classes += " outside-window";
   if (key === firstDay) classes += " is-today";
   return classes;
+}
+
+// ---------- The red "now" line ----------
+
+// Draw a red line across today's column at the current time (in the
+// chosen zone). Called on every redraw and once a minute, so it moves.
+function drawNowLine() {
+  document.querySelectorAll(".now-line").forEach((line) => line.remove());
+
+  const timeZone = ZONES[currentZone].timeZone;
+  const todayColumn = document.querySelector('.day-column[data-day="' + todayKey(timeZone) + '"]');
+  if (!todayColumn) return; // today isn't on screen (e.g. week 2 is showing)
+
+  const line = document.createElement("div");
+  line.className = "now-line";
+  line.style.top = (minutesInZone(Date.now(), timeZone) / (24 * 60)) * 100 + "%";
+  todayColumn.appendChild(line);
+}
+
+// Scroll the page so the "now" line is near the top of the screen, with
+// about an hour of the planner visible above it.
+function scrollToNow() {
+  const line = document.querySelector(".now-line");
+  if (!line) return;
+  const headerHeight = document.querySelector(".planner-head").offsetHeight;
+  const oneHour = document.querySelector(".hour-cell").offsetHeight;
+  const lineTopOnPage = line.getBoundingClientRect().top + window.scrollY;
+  window.scrollTo(0, Math.max(0, lineTopOnPage - headerHeight - oneHour));
 }
 
 // ---------- Drawing booking blocks ----------
@@ -390,8 +413,9 @@ function setUpControls() {
   zoneSelect.addEventListener("change", () => {
     currentZone = zoneSelect.value;
     saveZoneChoice(currentZone);
-    weekIndex = null; // jump back to the week containing today
+    weekIndex = null; // jump back to week 1 (starts today)
     render();
+    scrollToNow();
   });
 
   document.getElementById("prev-week").addEventListener("click", () => {
@@ -422,18 +446,22 @@ function showStatus(kind, text) {
 
 setUpControls();
 render();
+scrollToNow(); // start the page at the current time instead of at 00:00
 
 // Load the bookings (from Firebase, or this browser in test mode). Every
 // time the bookings change — including changes made by other people —
 // the blocks are redrawn.
 startStorage(drawBookings, showStatus);
 
-// Once a minute, check whether the date has changed (e.g. it's past
-// midnight). If it has, redraw so the window rolls forward by itself.
+// Once a minute: move the "now" line, and check whether the date has
+// changed (e.g. it's past midnight). If it has, redraw so the window
+// rolls forward by itself.
 setInterval(() => {
   if (todayKey(ZONES[currentZone].timeZone) !== lastTodayKey) {
     removeOldBookings();
     weekIndex = null;
     render();
+  } else {
+    drawNowLine();
   }
 }, 60 * 1000);

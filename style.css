@@ -243,6 +243,27 @@ body {
     rgba(0, 0, 0, 0.25) 0 6px, transparent 6px 12px);
 }
 
+/* The red "now" line across today's column (placed by app.js). */
+.now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #e53935;
+  z-index: 2;            /* above booking blocks */
+  pointer-events: none;  /* clicks go through it to the booking underneath */
+}
+.now-line::before {      /* the small red dot at the left end */
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e53935;
+}
+
 /* Today is highlighted; days outside the 14-day window are greyed out. */
 .is-today { background: var(--today); }
 .outside-window { background: var(--outside); color: var(--muted); }
