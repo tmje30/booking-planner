@@ -71,15 +71,18 @@ body {
 .help-button:hover { background: var(--accent); color: #fff; }
 
 /* ---- "plogenius in use / free" banner ---- */
+/* Big on purpose: it's the first thing you should see. */
 .presence-banner {
-  margin: 12px 20px 0;
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
+  margin: 14px 20px 0;
+  padding: 18px 24px;
+  border-radius: 12px;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
 }
-.presence-in-use { background: #e3f5e8; color: #1a7f37; border: 1px solid #b7e1c3; }
-.presence-free { background: var(--panel); color: var(--muted); border: 1px solid var(--line); }
+.presence-in-use { background: #1a7f37; color: #fff; border: 2px solid #146c2e; }
+.presence-free { background: #eef1f5; color: #3a4150; border: 2px solid var(--line-strong); }
 
 /* ---- Add-booking form ---- */
 .add-form {
