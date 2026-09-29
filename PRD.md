@@ -51,6 +51,12 @@ only save bookings on each person's own computer, so we need shared storage.
   <name> until <time>"). Cost: free (Tampermonkey is free; about one
   database write per minute per open plogenius tab, far below the free
   Firebase limits).
+  Idle check (added 2026-09-29): every 2 hours the helper asks "Still
+  using plogenius?" [Continue] [Log out]. No answer within 10 minutes =
+  logged out (signals stop and the presence entry is removed, so the
+  planner shows "free" at once). Reloading plogenius or "Log back in"
+  starts it again. Closing the window stops the signals too (free after
+  ~3 minutes); the chosen name stays remembered.
 
 ## Explicitly out of scope
 - User logins / passwords
