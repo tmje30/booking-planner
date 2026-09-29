@@ -51,11 +51,18 @@ only save bookings on each person's own computer, so we need shared storage.
   <name> until <time>"). Cost: free (Tampermonkey is free; about one
   database write per minute per open plogenius tab, far below the free
   Firebase limits).
+  Status card on opening plogenius (added 2026-09-29): shows who is using
+  it, who has it booked now, and the next booking. You only count as "in
+  use" after pressing Start. If free: "Book 1 hour & start", "Book 2 hours
+  & start" (from the current quarter hour; disabled with a reason if it
+  would clash) or "Start without booking". If someone else is using it or
+  has it booked right now: NO start buttons (one user at a time). If it's
+  your own booking now: "Start (your booking until ...)". Always: "Open
+  full planner" and "Not now". Also shown after being logged out.
   Idle check (added 2026-09-29): every 2 hours the helper asks "Still
   using plogenius?" [Continue] [Log out]. No answer within 10 minutes =
   logged out (signals stop and the presence entry is removed, so the
-  planner shows "free" at once). Reloading plogenius or "Log back in"
-  starts it again. Closing the window stops the signals too (free after
+  planner shows "free" at once), and the status card appears again. Closing the window stops the signals too (free after
   ~3 minutes); the chosen name stays remembered.
 
 ## Explicitly out of scope
