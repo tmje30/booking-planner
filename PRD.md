@@ -55,10 +55,19 @@ only save bookings on each person's own computer, so we need shared storage.
   it, who has it booked now, and the next booking. You only count as "in
   use" after pressing Start. If free: "Book 1 hour & start", "Book 2 hours
   & start" (from the current quarter hour; disabled with a reason if it
-  would clash) or "Start without booking". If someone else is using it or
+  would clash). CHANGED later the same day: "Start without booking" was
+  removed — you can only start by booking (1 hour, 2 hours, or "until the
+  next booking" when that's shorter), or with your own booking that's on
+  now. If someone else is using it or
   has it booked right now: NO start buttons (one user at a time). If it's
   your own booking now: "Start (your booking until ...)". Always: "Open
   full planner" and "Not now". Also shown after being logged out.
+  Booking end (added 2026-09-29): when your booking runs out, a card
+  shows who's next. Someone booked straight after you = logged out at
+  once (card shows who). Otherwise: "Extend 1 hour", "Extend 2 hours" or
+  "Extend until <next booking>" (extends the same booking), or "Log out";
+  no answer in 10 minutes = logged out. If the booking was extended in
+  the planner meanwhile, it just waits for the new end.
   Idle check (added 2026-09-29): every 2 hours the helper asks "Still
   using plogenius?" [Continue] [Log out]. No answer within 10 minutes =
   logged out (signals stop and the presence entry is removed, so the

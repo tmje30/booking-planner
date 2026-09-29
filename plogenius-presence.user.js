@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Booking Planner – plogenius "in use" signal
 // @namespace    https://tmje30.github.io/booking-planner/
-// @version      1.4.0
+// @version      1.5.0
 // @description  Shows the Booking Planner status when plogenius.com opens, and tells the planner who is using it.
 // @match        https://plogenius.com/*
 // @match        https://*.plogenius.com/*
@@ -20,9 +20,13 @@
 //
 // 1. When you open plogenius.com, it shows a "Booking Planner" card:
 //    is someone using plogenius right now, who has it booked now, and
-//    whose booking is next. If nobody is using it, you can book 1 or 2
-//    hours from the card. You only count as "in use" once you press one
-//    of the Start buttons.
+//    whose booking is next. If it's free, you book 1 or 2 hours (or until
+//    the next booking) from the card, and that starts your session. You
+//    only count as "in use" after booking (or starting your own booking).
+//
+//    When your booking time runs out, a card shows who is next. If
+//    someone is booked straight after you, you're logged out. If not,
+//    you can extend by 1 or 2 hours (or until the next booking).
 //
 // 2. While you're "in use", it sends a tiny "I'm still here" signal to our
 //    Firebase database once a minute, under your name. The Booking Planner
@@ -245,7 +249,8 @@
     return field && field.timestampValue ? Date.parse(field.timestampValue) : 0;
   }
 
-  // Everything the status card needs: who is in use, and all bookings.
+  // Everything the status card needs: who is in use, and all bookings
+  // that haven't ended yet (earliest first).
   async function loadPlannerStatus() {
     const [presence, bookings] = await Promise.all([
       firestoreRequest("GET", API_BASE + DOCS_PATH + "/presence"),
@@ -259,15 +264,16 @@
         lastSeenMs: readTime(doc.fields.lastSeen),
       }))
       .filter((p) => now - p.lastSeenMs < IN_USE_TIMEOUT_MS);
-    const allBookings = (bookings.documents || [])
+    const upcomingBookings = (bookings.documents || [])
       .map((doc) => ({
+        id: doc.name.split("/").pop(), // the document's name is the booking id
         user: doc.fields.user.stringValue,
         startMs: readNumber(doc.fields.startMs),
         endMs: readNumber(doc.fields.endMs),
       }))
-      .filter((b) => b.endMs > now) // only current and future ones
+      .filter((b) => b.endMs > now)
       .sort((a, b) => a.startMs - b.startMs);
-    return { activeUsers, upcomingBookings: allBookings };
+    return { activeUsers, upcomingBookings };
   }
 
   // Send one "still here" signal: write to the document presence/<name>.
@@ -296,19 +302,63 @@
       .catch(() => {});
   }
 
-  // Save a booking in the planner (same shape the planner itself uses).
-  function createBooking(userName, startMs, endMs) {
+  // Save a new booking in the planner (same shape the planner uses).
+  // Returns the booking, including its id.
+  async function createBooking(userName, startMs, endMs) {
     const id = "b-" + Date.now() + "-" + Math.floor(Math.random() * 10000);
-    return firestoreRequest("POST", API_BASE + DOCS_PATH + "/bookings?documentId=" + id, {
+    await firestoreRequest("POST", API_BASE + DOCS_PATH + "/bookings?documentId=" + id, {
       fields: {
         user: { stringValue: userName },
         startMs: { integerValue: String(startMs) },
         endMs: { integerValue: String(endMs) },
       },
     });
+    return { id, user: userName, startMs, endMs };
   }
 
-  // ---------- The status card ----------
+  // Make an existing booking end later (used for "Extend").
+  // updateMask = "only change endMs, leave the rest as it is".
+  function changeBookingEnd(bookingId, newEndMs) {
+    return firestoreRequest("PATCH",
+      API_BASE + DOCS_PATH + "/bookings/" + bookingId + "?updateMask.fieldPaths=endMs",
+      { fields: { endMs: { integerValue: String(newEndMs) } } });
+  }
+
+  // ---------- Booking choices (used on both cards) ----------
+
+  // Buttons for booking time starting at `fromMs`: 1 hour, 2 hours, and
+  // "until the next booking" if that's shorter than 2 hours. Choices that
+  // would run into the next booking are left out. `ignoreId` = your own
+  // current booking (when extending, it doesn't count as "in the way").
+  // `verb` is "Book" or "Extend". Returns { buttons, nextBooking }.
+  function bookingChoices(fromMs, upcomingBookings, ignoreId, verb, onPick) {
+    const nextBooking = upcomingBookings.find((b) => b.id !== ignoreId && b.endMs > fromMs);
+    const limitMs = nextBooking ? nextBooking.startMs : Infinity; // can't go past this
+    const buttons = [];
+    for (const hours of [1, 2]) {
+      const endMs = fromMs + hours * HOUR_MS;
+      if (endMs <= limitMs) {
+        buttons.push({
+          label: verb + " " + hours + " hour" + (hours > 1 ? "s" : "") + " (until " + timeText(endMs) + ")",
+          color: hours === 1 ? "#2a9d8f" : "#1f7a70",
+          onClick: () => onPick(endMs),
+        });
+      }
+    }
+    // "Until the next booking", if that's at least 15 minutes and less
+    // than 2 hours away (and not exactly 1 hour, which is already offered).
+    const gapMs = limitMs - fromMs;
+    if (nextBooking && gapMs >= QUARTER_HOUR_MS && gapMs < 2 * HOUR_MS && gapMs !== HOUR_MS) {
+      buttons.push({
+        label: verb + " until " + timeText(limitMs) + " (" + nextBooking.user + " is next)",
+        color: "#3a8f5a",
+        onClick: () => onPick(limitMs),
+      });
+    }
+    return { buttons, nextBooking };
+  }
+
+  // ---------- The status card (when plogenius opens) ----------
 
   // Shown when plogenius opens, and after you've been logged out.
   async function showStatusCard(userName, heading) {
@@ -319,9 +369,9 @@
       showPanel({
         title: heading || "Booking Planner",
         lines: ["Couldn't load the planner (" + error.message + ").",
-                "You can still start, or check the planner yourself."],
+                "Check your internet connection, then try again."],
         buttons: [
-          { label: "Start using plogenius", color: "#1a7f37", onClick: () => logIn(userName) },
+          { label: "Try again", color: "#1a7f37", onClick: () => showStatusCard(userName, heading) },
           openPlannerButton(),
         ],
         smallLink: { label: "Not now" },
@@ -358,42 +408,29 @@
       lines.push("No upcoming bookings.");
     }
 
-    // Buttons. Only one person can use plogenius at a time, so there are
-    // NO start buttons while someone else is using it, or while someone
-    // else has it booked right now.
-    const buttons = [];
-    const someoneElseUsing = others.length > 0;
-    const someoneElseBookedNow = bookedNow && bookedNow.user !== userName;
-    if (someoneElseUsing) {
+    // Buttons. Only one person can use plogenius at a time, and you can
+    // only start by booking (or with your own booking that's on now).
+    let buttons = [];
+    if (others.length > 0) {
       lines.push("Only one person can use plogenius at a time. Check the planner for a free slot.");
-    } else if (someoneElseBookedNow) {
+    } else if (bookedNow && bookedNow.user !== userName) {
       lines.push("It's " + bookedNow.user + "'s booked time. Check the planner for a free slot.");
     } else if (bookedNow) {
       // It's your own booking right now: just start.
       buttons.push({
         label: "Start (your booking until " + timeText(bookedNow.endMs) + ")",
         color: "#1a7f37",
-        onClick: () => logIn(userName),
+        onClick: () => logIn(userName, bookedNow),
       });
     } else {
-      // Offer 1 or 2 hours, starting at the current quarter hour.
+      // Free: book from the current quarter hour (the planner's 15-minute steps).
       const startMs = Math.floor(now / QUARTER_HOUR_MS) * QUARTER_HOUR_MS;
-      for (const hours of [1, 2]) {
-        const endMs = startMs + hours * HOUR_MS;
-        // Does it overlap someone else's booking? (Your own is fine: you'd
-        // just be double-booking yourself, so we block that too.)
-        const clash = status.upcomingBookings.find((b) => b.startMs < endMs && startMs < b.endMs);
-        buttons.push({
-          label: "Book " + hours + " hour" + (hours > 1 ? "s" : "") + " & start (" +
-                 timeText(startMs).slice(0, 5) + "–" + timeText(endMs) + ")",
-          color: hours === 1 ? "#2a9d8f" : "#1f7a70",
-          disabled: Boolean(clash),
-          note: clash ? "Not possible: " + (clash.user === userName ? "you have" : clash.user + " has") +
-                        " a booking " + timeText(clash.startMs) + "–" + timeText(clash.endMs) : null,
-          onClick: () => bookAndStart(userName, startMs, endMs),
-        });
+      const choices = bookingChoices(startMs, status.upcomingBookings, null, "Book",
+        (endMs) => bookAndStart(userName, startMs, endMs));
+      buttons = choices.buttons;
+      if (buttons.length === 0) {
+        lines.push("The next booking starts in less than 15 minutes, so there's no time to book.");
       }
-      buttons.push({ label: "Start without booking", color: "#1a7f37", onClick: () => logIn(userName) });
     }
     buttons.push(openPlannerButton());
 
@@ -416,8 +453,8 @@
 
   async function bookAndStart(userName, startMs, endMs) {
     try {
-      await createBooking(userName, startMs, endMs);
-      logIn(userName);
+      const booking = await createBooking(userName, startMs, endMs);
+      logIn(userName, booking);
     } catch (error) {
       showPanel({
         title: "Booking didn't work",
@@ -426,6 +463,80 @@
         buttons: [openPlannerButton()],
         smallLink: { label: "Close", onClick: () => showStatusCard(userName) },
       });
+    }
+  }
+
+  // ---------- When your booking runs out ----------
+
+  async function onBookingEnded(userName) {
+    let status;
+    try {
+      status = await loadPlannerStatus();
+    } catch (error) {
+      // Can't check who's next: log out to be safe (one user at a time).
+      logOut(userName, "Your booking has ended");
+      return;
+    }
+
+    // Maybe the booking was extended in the planner meanwhile: if it now
+    // ends later, just wait for the new end time.
+    const mine = status.upcomingBookings.find((b) => currentBooking && b.id === currentBooking.id);
+    if (mine && mine.endMs > Date.now() + 30 * 1000) {
+      currentBooking = mine;
+      scheduleBookingEnd(userName);
+      return;
+    }
+
+    const endedAt = currentBooking ? currentBooking.endMs : Date.now();
+    const choices = bookingChoices(endedAt, status.upcomingBookings,
+      currentBooking && currentBooking.id, "Extend",
+      (newEndMs) => extendBooking(userName, newEndMs));
+
+    // Someone is booked straight after you (no time left to extend):
+    // log out, and the card shows who's next.
+    if (choices.buttons.length === 0 && choices.nextBooking) {
+      logOut(userName, "Your booking has ended");
+      return;
+    }
+
+    let secondsLeft = ANSWER_WITHIN_MS / 1000;
+    const next = choices.nextBooking;
+    const infoLines = () => [
+      next ? "Next booking: " + next.user + ", " + dayText(next.startMs) + " at " + timeText(next.startMs)
+           : "Nobody is booked after you.",
+      "Extend your booking, or log out. You'll be logged out automatically in " +
+        Math.floor(secondsLeft / 60) + ":" + String(secondsLeft % 60).padStart(2, "0") + ".",
+    ];
+
+    const panel = showPanel({
+      title: "Your booking has ended",
+      lines: infoLines(),
+      buttons: choices.buttons
+        .map((b) => ({ ...b, onClick: () => { clearInterval(countdown); b.onClick(); } }))
+        .concat([{ label: "Log out", color: "#6b7280",
+                   onClick: () => { clearInterval(countdown); logOut(userName); } }]),
+    });
+
+    // Tick the countdown once a second; log out when it reaches 0.
+    const countdown = setInterval(() => {
+      secondsLeft -= 1;
+      if (secondsLeft <= 0) {
+        clearInterval(countdown);
+        panel.close();
+        logOut(userName, "Logged out (no answer)");
+      } else {
+        panel.setText(infoLines());
+      }
+    }, 1000);
+  }
+
+  async function extendBooking(userName, newEndMs) {
+    try {
+      await changeBookingEnd(currentBooking.id, newEndMs);
+      currentBooking.endMs = newEndMs;
+      scheduleBookingEnd(userName);
+    } catch (error) {
+      logOut(userName, "Couldn't extend (" + error.message + ")");
     }
   }
 
@@ -448,31 +559,44 @@
 
   // ---------- Logged in / logged out ----------
 
-  let signalTimer = null; // the once-a-minute signal
-  let checkTimer = null;  // the 2-hour "still using?" timer
+  let signalTimer = null;     // the once-a-minute signal
+  let checkTimer = null;      // the 2-hour "still using?" timer
+  let endTimer = null;        // fires when your booking runs out
+  let currentBooking = null;  // the booking you're using now { id, startMs, endMs }
   let loggedIn = false;
 
-  // Start sending: once now, then once a minute. `isFresh` = a new
-  // session (sets "open since" to now); false when you click "Continue",
-  // so the planner keeps showing when you really started.
-  function logIn(userName, isFresh = true) {
+  // Start a session for `booking`: signal once now, then once a minute.
+  // `isFresh` = a new session (sets "open since" to now); false when you
+  // click "Continue", so the planner keeps showing when you really started.
+  function logIn(userName, booking, isFresh = true) {
     stopTimers();
     loggedIn = true;
+    if (booking) currentBooking = booking;
     sendSignal(userName, isFresh);
     signalTimer = setInterval(() => sendSignal(userName, false), SIGNAL_EVERY_MS);
     checkTimer = setTimeout(() => askStillUsing(userName), CHECK_EVERY_MS);
+    scheduleBookingEnd(userName);
   }
 
-  function logOut(userName, becauseIdle) {
+  // Set the timer for the end of the current booking.
+  function scheduleBookingEnd(userName) {
+    clearTimeout(endTimer);
+    if (!currentBooking) return;
+    endTimer = setTimeout(() => onBookingEnded(userName), Math.max(0, currentBooking.endMs - Date.now()));
+  }
+
+  function logOut(userName, heading) {
     stopTimers();
     loggedIn = false;
+    currentBooking = null;
     removeSignal(userName);
-    showStatusCard(userName, becauseIdle ? "Logged out (no answer)" : "Logged out");
+    showStatusCard(userName, heading || "Logged out");
   }
 
   function stopTimers() {
     clearInterval(signalTimer);
     clearTimeout(checkTimer);
+    clearTimeout(endTimer);
   }
 
   // Every 2 hours: "Still using plogenius?" with a 10-minute countdown.
@@ -489,8 +613,10 @@
       title: "Still using plogenius?",
       lines: countdownText(),
       buttons: [
-        { label: "Continue", color: "#1a7f37", onClick: () => { clearInterval(countdown); logIn(userName, false); } },
-        { label: "Log out", color: "#6b7280", onClick: () => { clearInterval(countdown); logOut(userName, false); } },
+        { label: "Continue", color: "#1a7f37",
+          onClick: () => { clearInterval(countdown); logIn(userName, null, false); } },
+        { label: "Log out", color: "#6b7280",
+          onClick: () => { clearInterval(countdown); logOut(userName); } },
       ],
     });
 
@@ -500,7 +626,7 @@
       if (secondsLeft <= 0) {
         clearInterval(countdown);
         panel.close();
-        logOut(userName, true);
+        logOut(userName, "Logged out (no answer)");
       } else {
         panel.setText(countdownText());
       }
@@ -516,7 +642,7 @@
   });
   GM_registerMenuCommand("Log out of the Booking Planner", () => {
     const name = GM_getValue("userName", null);
-    if (name && loggedIn) logOut(name, false);
+    if (name && loggedIn) logOut(name);
   });
   GM_registerMenuCommand("Change my Booking Planner name", () => {
     showNamePicker(() => location.reload());
