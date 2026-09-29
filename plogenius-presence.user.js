@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Booking Planner – plogenius "in use" signal
 // @namespace    https://tmje30.github.io/booking-planner/
-// @version      1.1.0
+// @version      1.2.0
 // @description  While plogenius.com is open, tells the Booking Planner who is using it.
 // @match        https://plogenius.com/*
 // @match        https://*.plogenius.com/*
@@ -71,18 +71,21 @@
         .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.55);
                     display: flex; align-items: center; justify-content: center;
                     font-family: system-ui, "Segoe UI", sans-serif; }
-        .panel { background: #fff; color: #1f2430; border-radius: 12px;
-                 padding: 20px 24px; box-shadow: 0 10px 30px rgba(0,0,0,.35);
-                 max-width: 340px; text-align: center; }
-        h2 { margin: 0 0 6px; font-size: 18px; }
-        p { margin: 0 0 16px; font-size: 13px; color: #6b7280; }
-        button.name { display: block; width: 100%; margin: 8px 0; padding: 10px;
-                      font-size: 15px; font-weight: 600; color: #fff; border: none;
-                      border-radius: 8px; cursor: pointer; }
+        .panel { background: #fff; color: #1f2430; border-radius: 18px;
+                 padding: 36px 44px; box-shadow: 0 14px 40px rgba(0,0,0,.45);
+                 width: 480px; max-width: 90vw; text-align: center; }
+        h2 { margin: 0 0 10px; font-size: 32px; }
+        p { margin: 0 0 24px; font-size: 18px; color: #6b7280; line-height: 1.4; }
+        button.name { display: block; width: 100%; margin: 14px 0; padding: 20px;
+                      font-size: 26px; font-weight: 700; color: #fff; border: none;
+                      border-radius: 12px; cursor: pointer; }
         button.name:hover { filter: brightness(1.1); }
-        button.later { margin-top: 6px; background: none; border: none;
-                       color: #6b7280; font-size: 12px; cursor: pointer; }
+        button.later { margin-top: 10px; background: none; border: none;
+                       color: #6b7280; font-size: 16px; cursor: pointer; }
+        /* Invisible 100px-wide ruler, used to detect page zoom (see below). */
+        .probe { position: absolute; width: 100px; height: 1px; visibility: hidden; }
       </style>
+      <div class="probe"></div>
       <div class="backdrop">
         <div class="panel">
           <h2>Booking Planner</h2>
@@ -108,7 +111,17 @@
     }
     root.querySelector(".later").addEventListener("click", () => host.remove());
 
-    document.body.appendChild(host);
+    // Attach to the very top of the page (<html>), not <body>: some sites
+    // shrink or zoom <body>, which would shrink our panel too.
+    document.documentElement.appendChild(host);
+
+    // plogenius scales its page down. Measure how wide our 100px ruler
+    // really is; if it came out smaller (e.g. 40px), zoom our panel back up
+    // by the same amount so it shows at normal size.
+    const realWidth = root.querySelector(".probe").getBoundingClientRect().width;
+    if (realWidth > 0 && Math.abs(realWidth - 100) > 2) {
+      host.style.zoom = String(100 / realWidth);
+    }
   }
 
   // A menu item in the Tampermonkey icon, in case the name needs changing.
