@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Booking Planner – plogenius "in use" signal
 // @namespace    https://tmje30.github.io/booking-planner/
-// @version      1.0.0
+// @version      1.1.0
 // @description  While plogenius.com is open, tells the Booking Planner who is using it.
 // @match        https://plogenius.com/*
 // @match        https://*.plogenius.com/*
@@ -37,7 +37,11 @@
   // ---------- Settings ----------
 
   // Must match USERS in js/bookings.js (and the list in firestore.rules).
-  const USERS = ["Baby4Life", "Tripplelift", "Red.ElinGho"];
+  const USERS = [
+    { name: "Baby4Life",   color: "#e76f51" },
+    { name: "Tripplelift", color: "#2a9d8f" },
+    { name: "Red.ElinGho", color: "#7b61ff" },
+  ];
 
   // Same public Firebase details as js/firebase-config.js.
   const API_KEY = "AIzaSyB_CTFK4MZ1JeSTWOiSp7xAwPHKLiAwFEw";
@@ -50,32 +54,81 @@
 
   // ---------- Who am I? ----------
 
-  // Ask once which user this browser belongs to, and remember the answer
-  // (GM_setValue stores it inside Tampermonkey, on this computer only).
-  function askForName() {
-    const list = USERS.map((name, i) => (i + 1) + " = " + name).join("\n");
-    const answer = prompt("Booking Planner: who are you on this computer?\n" + list + "\n\nType the number:");
-    const name = USERS[Number(answer) - 1];
-    if (name) GM_setValue("userName", name);
-    return name || null;
+  // Show a small panel with one button per user. When a button is
+  // clicked, the name is remembered (GM_setValue stores it inside
+  // Tampermonkey, on this computer only) and `onChosen(name)` runs.
+  //
+  // The panel lives inside a "shadow root": a sealed-off box, so the
+  // plogenius page's own styles can't mess up our buttons (and ours
+  // can't affect plogenius).
+  function showNamePicker(onChosen) {
+    const host = document.createElement("div");
+    host.style.cssText = "position:fixed;inset:0;z-index:2147483647;";
+    const root = host.attachShadow({ mode: "open" });
+
+    root.innerHTML = `
+      <style>
+        .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.55);
+                    display: flex; align-items: center; justify-content: center;
+                    font-family: system-ui, "Segoe UI", sans-serif; }
+        .panel { background: #fff; color: #1f2430; border-radius: 12px;
+                 padding: 20px 24px; box-shadow: 0 10px 30px rgba(0,0,0,.35);
+                 max-width: 340px; text-align: center; }
+        h2 { margin: 0 0 6px; font-size: 18px; }
+        p { margin: 0 0 16px; font-size: 13px; color: #6b7280; }
+        button.name { display: block; width: 100%; margin: 8px 0; padding: 10px;
+                      font-size: 15px; font-weight: 600; color: #fff; border: none;
+                      border-radius: 8px; cursor: pointer; }
+        button.name:hover { filter: brightness(1.1); }
+        button.later { margin-top: 6px; background: none; border: none;
+                       color: #6b7280; font-size: 12px; cursor: pointer; }
+      </style>
+      <div class="backdrop">
+        <div class="panel">
+          <h2>Booking Planner</h2>
+          <p>Who is using plogenius on this computer?<br>(You only choose this once.)</p>
+          <div class="buttons"></div>
+          <button class="later">Not now</button>
+        </div>
+      </div>`;
+
+    // One coloured button per user (same colours as the planner).
+    const buttons = root.querySelector(".buttons");
+    for (const user of USERS) {
+      const button = document.createElement("button");
+      button.className = "name";
+      button.textContent = user.name;
+      button.style.background = user.color;
+      button.addEventListener("click", () => {
+        GM_setValue("userName", user.name);
+        host.remove();
+        onChosen(user.name);
+      });
+      buttons.appendChild(button);
+    }
+    root.querySelector(".later").addEventListener("click", () => host.remove());
+
+    document.body.appendChild(host);
   }
 
-  let userName = GM_getValue("userName", null);
-  if (!USERS.includes(userName)) userName = askForName();
-  if (!userName) return; // no name chosen: do nothing this time
-
   // A menu item in the Tampermonkey icon, in case the name needs changing.
-  GM_registerMenuCommand("Change my Booking Planner name (now: " + userName + ")", () => {
-    const name = askForName();
-    if (name) location.reload();
+  GM_registerMenuCommand("Change my Booking Planner name", () => {
+    showNamePicker(() => location.reload());
   });
+
+  const savedName = GM_getValue("userName", null);
+  if (USERS.some((u) => u.name === savedName)) {
+    startSignals(savedName);
+  } else {
+    showNamePicker(startSignals); // first time: ask, then start
+  }
 
   // ---------- Sending the signal ----------
 
   // Firestore's REST API: we send one "write" to the document
   // presence/<userName>. "REQUEST_TIME" means "use the database server's
   // clock", so a wrong clock on this computer can't confuse the planner.
-  function sendSignal(isFirst) {
+  function sendSignal(userName, isFirst) {
     const write = {
       update: {
         name: DOCS_PATH + "/presence/" + encodeURIComponent(userName),
@@ -105,6 +158,9 @@
     });
   }
 
-  sendSignal(true);                                  // "just opened"
-  setInterval(() => sendSignal(false), SIGNAL_EVERY_MS); // "still open"
+  // Start sending: once now ("just opened"), then once a minute ("still open").
+  function startSignals(userName) {
+    sendSignal(userName, true);
+    setInterval(() => sendSignal(userName, false), SIGNAL_EVERY_MS);
+  }
 })();
