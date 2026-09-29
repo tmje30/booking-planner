@@ -1,5 +1,8 @@
 # Booking Planner — PRD
 
+Live link: https://tmje30.github.io/booking-planner/
+Repo (public): https://github.com/tmje30/booking-planner
+
 ## What we're building
 A shared web page where our group books time slots for an app we share.
 It shows a rolling 2-week planner with real dates. Everyone opens the same
