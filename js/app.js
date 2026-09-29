@@ -82,6 +82,7 @@ function render() {
   drawGrid(weekStart, firstDay, lastDay);
   drawBookings();
   drawNowLine();
+  drawPresenceBanner(); // in presence.js (times follow the chosen zone)
   fillDayOptions();
   updateNextDayHint();
 }
@@ -101,7 +102,11 @@ function drawGrid(weekStart, firstDay, lastDay) {
   // --- Header row: an empty corner cell + one header per day ---
   const head = document.createElement("div");
   head.className = "planner-head";
-  head.appendChild(document.createElement("div")); // empty corner above the hours
+  // The corner above the hours says which zone the times are in, e.g. "CEST".
+  const corner = document.createElement("div");
+  corner.className = "zone-corner";
+  corner.textContent = zoneAbbreviation(currentZone, Date.now());
+  head.appendChild(corner);
 
   const dayKeys = [];
   for (let i = 0; i < 7; i++) dayKeys.push(addDays(weekStart, i));
@@ -237,7 +242,8 @@ function makeBookingBlock(booking, topMinutes, bottomMinutes, continued, continu
 
   // The label always shows the WHOLE booking's times, even on a piece.
   const timesText = timeTextInZone(booking.startMs, timeZone) + "–" +
-                    timeTextInZone(booking.endMs, timeZone);
+                    timeTextInZone(booking.endMs, timeZone) + " " +
+                    zoneAbbreviation(currentZone, booking.startMs);
   let text = booking.user + " " + timesText;
   if (continued) text = "↑ continued · " + text;
   if (continues) text += " · ↓ continues";
@@ -321,7 +327,8 @@ function problemWithTimes(startMs, endMs, ignoreId) {
 // e.g. "Tue 29 Sept 14:00–16:00" in the given zone.
 function describeBooking(booking, timeZone) {
   return formatDayHeader(dayKeyInZone(booking.startMs, timeZone)) + " " +
-    timeTextInZone(booking.startMs, timeZone) + "–" + timeTextInZone(booking.endMs, timeZone);
+    timeTextInZone(booking.startMs, timeZone) + "–" + timeTextInZone(booking.endMs, timeZone) +
+    " " + zoneAbbreviation(currentZone, booking.startMs);
 }
 
 // Show a short message next to the Add button (red if it's a problem).
@@ -350,6 +357,7 @@ function setUpAddForm() {
 
   document.getElementById("add-form").addEventListener("submit", handleAddBooking);
   startSelect.addEventListener("change", updateNextDayHint);
+  document.getElementById("add-day").addEventListener("change", updateNextDayHint);
   endSelect.addEventListener("change", updateNextDayHint);
 }
 
@@ -364,6 +372,12 @@ function updateNextDayHint() {
   const start = Number(document.getElementById("add-start").value);
   const end = Number(document.getElementById("add-end").value);
   document.getElementById("next-day-hint").textContent = nextDayHintText(start, end);
+  // Show the zone next to the times, e.g. "CEST", for the chosen day.
+  const day = document.getElementById("add-day").value;
+  if (day) {
+    document.getElementById("add-zone").textContent =
+      zoneAbbreviation(currentZone, zonedTimeToMs(day, start, ZONES[currentZone].timeZone));
+  }
 }
 
 // Runs when the "Add" button is pressed.
@@ -385,7 +399,8 @@ function handleAddBooking(event) {
 
   addBooking({ id: newBookingId(), user: user, startMs: startMs, endMs: endMs });
   showMessage("Booked " + user + ", " + formatDayHeader(dayKey) + " " +
-    minutesToText(startMinutes) + "–" + minutesToText(endMinutes) + ".", false);
+    minutesToText(startMinutes) + "–" + minutesToText(endMinutes) + " " +
+    zoneAbbreviation(currentZone, startMs) + ".", false);
 
   weekIndex = weekIndexOfDay(dayKey); // show the week the booking is in
   render();
@@ -451,7 +466,13 @@ scrollToNow(); // start the page at the current time instead of at 00:00
 // Load the bookings (from Firebase, or this browser in test mode). Every
 // time the bookings change — including changes made by other people —
 // the blocks are redrawn.
-startStorage(drawBookings, showStatus);
+startStorage(() => {
+  drawBookings();
+  drawPresenceBanner(); // "next booking" may have changed
+}, showStatus);
+
+// Start the "plogenius in use / free" banner (presence.js).
+startPresence();
 
 // Once a minute: move the "now" line, and check whether the date has
 // changed (e.g. it's past midnight). If it has, redraw so the window

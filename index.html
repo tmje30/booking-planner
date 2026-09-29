@@ -31,6 +31,10 @@
             title="How to use the planner" aria-label="How to use the planner">?</button>
   </header>
 
+  <!-- "plogenius in use / free" banner, filled in by presence.js.
+       Hidden in test mode (no shared database). -->
+  <div id="presence-banner" class="presence-banner" hidden></div>
+
   <!-- Add-a-booking form. The dropdown options are filled in by app.js. -->
   <form id="add-form" class="add-form">
     <strong>Add booking:</strong>
@@ -38,6 +42,7 @@
     <label>Day <select id="add-day"></select></label>
     <label>Start <select id="add-start"></select></label>
     <label>End <select id="add-end"></select></label>
+    <span id="add-zone" class="zone-tag"></span>
     <span id="next-day-hint" class="next-day-hint"></span>
     <button type="submit">Add</button>
     <span id="add-message" class="add-message"></span>
@@ -67,6 +72,7 @@
       <div class="edit-row">
         <label>Start <select id="edit-start"></select></label>
         <label>End <select id="edit-end"></select></label>
+        <span id="edit-zone" class="zone-tag"></span>
         <span id="edit-next-day-hint" class="next-day-hint"></span>
       </div>
       <p id="edit-message" class="add-message"></p>
@@ -131,6 +137,23 @@
         <li>Old bookings are removed automatically about a day after they end.</li>
       </ul>
 
+      <h3>🟢 "In use" / "Free" banner</h3>
+      <p>The bar under the title shows whether someone has <b>plogenius.com</b>
+        open right now, or that it's free and whose booking is next. It turns
+        "free" about 3 minutes after plogenius is closed.</p>
+      <p>For this to work, <b>each person installs a small helper once</b>:</p>
+      <ol>
+        <li>Install the free <b>Tampermonkey</b> extension for your browser
+          (from the Chrome Web Store or Edge Add-ons).</li>
+        <li>Open this link and click <b>Install</b>:<br>
+          <a href="plogenius-presence.user.js" target="_blank">plogenius helper script</a></li>
+        <li>Open plogenius.com. The first time, it asks who you are — type
+          your number.</li>
+      </ol>
+      <p>If nothing happens on plogenius, click the Tampermonkey icon: it may
+        ask you to switch on a setting (in Chrome: "Allow User Scripts" on
+        the extension's Details page).</p>
+
       <h3>👥 Shared</h3>
       <p>Everyone who opens this link sees the same bookings, and changes show
         up for everyone within a few seconds — no need to refresh. The label at
@@ -160,6 +183,7 @@
   <script src="js/bookings.js"></script>
   <script src="js/edit.js"></script>
   <script src="js/drag.js"></script>
+  <script src="js/presence.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -25,6 +25,7 @@ function setUpEditDialog() {
   document.getElementById("copy-button").addEventListener("click", handleCopy);
   document.getElementById("edit-start").addEventListener("change", updateEditNextDayHint);
   document.getElementById("edit-end").addEventListener("change", updateEditNextDayHint);
+  document.getElementById("edit-day").addEventListener("change", updateEditNextDayHint);
 }
 
 // Open the window for one booking, with its current values filled in.
@@ -58,6 +59,10 @@ function updateEditNextDayHint() {
   const start = Number(document.getElementById("edit-start").value);
   const end = Number(document.getElementById("edit-end").value);
   document.getElementById("edit-next-day-hint").textContent = nextDayHintText(start, end);
+  // Show the zone next to the times, e.g. "CEST", for the chosen day.
+  const day = document.getElementById("edit-day").value;
+  document.getElementById("edit-zone").textContent =
+    zoneAbbreviation(currentZone, zonedTimeToMs(day, start, ZONES[currentZone].timeZone));
 }
 
 // A message inside the window (red if it's a problem).
@@ -93,7 +98,8 @@ function handleSaveEdit(event) {
   updateBooking(editingId, { user: user, startMs: startMs, endMs: endMs });
   closeEditDialog();
   showMessage("Saved " + user + ", " + formatDayHeader(dayKey) + " " +
-    minutesToText(startMinutes) + "–" + minutesToText(endMinutes) + ".", false);
+    minutesToText(startMinutes) + "–" + minutesToText(endMinutes) + " " +
+    zoneAbbreviation(currentZone, startMs) + ".", false);
   weekIndex = weekIndexOfDay(dayKey); // show the week the booking is now in
   render();
 }

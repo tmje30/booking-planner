@@ -6,14 +6,20 @@
 //
 // Because there are no logins, anyone with the link can read and change
 // bookings. These rules make sure that what gets written is ONLY a
-// booking, in the right shape — nothing else can be stored.
+// booking or a "plogenius is open" signal, in the right shape — nothing
+// else can be stored.
 //
-// IMPORTANT: the list of users below must match USERS in js/bookings.js.
-// If you add or remove a user, change BOTH places and re-publish the rules.
+// IMPORTANT: the list of users below must match USERS in js/bookings.js
+// and in plogenius-presence.user.js. If you add or remove a user, change
+// ALL THREE places and re-publish the rules.
 
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function isKnownUser(name) {
+      return name in ['Baby4Life', 'Tripplelift', 'Red.ElinGho'];
+    }
 
     // A valid booking has exactly these 3 fields, a known user, an end
     // after its start, is at most 24 hours long, and starts roughly
@@ -22,7 +28,7 @@ service cloud.firestore {
       let day = 24 * 60 * 60 * 1000;
       return b.keys().hasOnly(['user', 'startMs', 'endMs'])
         && b.keys().hasAll(['user', 'startMs', 'endMs'])
-        && b.user in ['Baby4Life', 'Tripplelift', 'Red.ElinGho']
+        && isKnownUser(b.user)
         && b.startMs is number
         && b.endMs is number
         && b.endMs > b.startMs
@@ -31,12 +37,28 @@ service cloud.firestore {
         && b.startMs < request.time.toMillis() + 16 * day;
     }
 
-    // Only the "bookings" collection exists. Everything else is refused.
+    // Only the "bookings" and "presence" collections exist.
+    // Everything else is refused.
     match /bookings/{bookingId} {
       allow read: if true;
       allow delete: if true;
       allow create, update: if bookingId.size() <= 40
         && isValidBooking(request.resource.data);
+    }
+
+    // "Is plogenius open?" signals, one document per user, sent by the
+    // Tampermonkey script. Only a known user's own document, only these
+    // fields, and "lastSeen" must be the database server's own clock.
+    match /presence/{userName} {
+      allow read: if true;
+      allow delete: if true;
+      allow create, update: if isKnownUser(userName)
+        && request.resource.data.keys().hasOnly(['user', 'openedAt', 'lastSeen'])
+        && request.resource.data.keys().hasAll(['user', 'lastSeen'])
+        && request.resource.data.user == userName
+        && request.resource.data.lastSeen == request.time
+        && (!('openedAt' in request.resource.data)
+            || request.resource.data.openedAt <= request.time);
     }
   }
 }

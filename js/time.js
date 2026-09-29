@@ -146,6 +146,14 @@ function timeTextInZone(ms, timeZone) {
   return minutesToText(minutesInZone(ms, timeZone));
 }
 
+// The short zone name for a moment, e.g. "CEST" (Copenhagen summer),
+// "CET" (Copenhagen winter) or "SGT". It needs the moment, because
+// Copenhagen's name changes when the clocks change.
+function zoneAbbreviation(zoneKey, ms) {
+  if (zoneKey === "SGT") return "SGT";
+  return utcOffsetMinutes(ZONES.CPH.timeZone, new Date(ms)) === 120 ? "CEST" : "CET";
+}
+
 // Pick a starting zone for someone who has never chosen one:
 // if their computer is set to Singapore time, use SGT, otherwise Copenhagen.
 function detectDefaultZone() {

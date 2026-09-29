@@ -38,6 +38,19 @@ only save bookings on each person's own computer, so we need shared storage.
 - Changes show up for everyone within a second or two, without refreshing.
 - A "?" help button in the top-right corner opens a pop-up with short,
   plain instructions on how to use the planner (added 2026-09-29).
+- Every time shown carries its zone label (CEST / CET / SGT) (added
+  2026-09-29).
+- "plogenius in use / free" banner (added 2026-09-29). The shared app is
+  plogenius.com. A web page can't see other open sites, so each person
+  installs a free Tampermonkey userscript (plogenius-presence.user.js,
+  served from GitHub Pages) that sends a "still open" signal under their
+  name once a minute while plogenius.com is open (stored in Firestore
+  collection "presence", using the server's clock). The banner shows
+  "🟢 in use: <name> · open since <time>", or, when no signal for 3
+  minutes, "⚪ free · next booking: <name> at <time>" (or "booked now by
+  <name> until <time>"). Cost: free (Tampermonkey is free; about one
+  database write per minute per open plogenius tab, far below the free
+  Firebase limits).
 
 ## Explicitly out of scope
 - User logins / passwords
