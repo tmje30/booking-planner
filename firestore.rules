@@ -1,0 +1,42 @@
+// firestore.rules — the database's security rules.
+//
+// This file is NOT used by the web page. It's a copy we keep here so it's
+// backed up with the project. The real rules live in the Firebase console:
+// Firestore Database → Rules tab → paste this whole file → Publish.
+//
+// Because there are no logins, anyone with the link can read and change
+// bookings. These rules make sure that what gets written is ONLY a
+// booking, in the right shape — nothing else can be stored.
+//
+// IMPORTANT: the list of users below must match USERS in js/bookings.js.
+// If you add or remove a user, change BOTH places and re-publish the rules.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // A valid booking has exactly these 3 fields, a known user, an end
+    // after its start, is at most 24 hours long, and starts roughly
+    // within the 14-day window (2 days back to 16 days ahead of now).
+    function isValidBooking(b) {
+      let day = 24 * 60 * 60 * 1000;
+      return b.keys().hasOnly(['user', 'startMs', 'endMs'])
+        && b.keys().hasAll(['user', 'startMs', 'endMs'])
+        && b.user in ['Baby4Life', 'Tripplelift', 'Red.ElinGho']
+        && b.startMs is number
+        && b.endMs is number
+        && b.endMs > b.startMs
+        && b.endMs - b.startMs <= day
+        && b.startMs > request.time.toMillis() - 2 * day
+        && b.startMs < request.time.toMillis() + 16 * day;
+    }
+
+    // Only the "bookings" collection exists. Everything else is refused.
+    match /bookings/{bookingId} {
+      allow read: if true;
+      allow delete: if true;
+      allow create, update: if bookingId.size() <= 40
+        && isValidBooking(request.resource.data);
+    }
+  }
+}

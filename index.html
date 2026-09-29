@@ -1,0 +1,164 @@
+<!doctype html>
+<!--
+  index.html — the page itself. It describes WHAT is on the page
+  (the top bar, the buttons, an empty box for the planner).
+  style.css says how it LOOKS, and the js/ files make it DO things.
+  GitHub Pages will serve this file when someone opens the link.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Booking Planner</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top-bar">
+    <h1>Booking Planner</h1>
+
+    <!-- Time zone switch. The options are filled in by app.js. -->
+    <label class="zone-switch">
+      Show times in:
+      <select id="zone-select"></select>
+    </label>
+    <p id="zone-status" class="zone-status"></p>
+
+    <!-- Shows "Live", "Test mode" or an error. Filled in by app.js. -->
+    <span id="storage-status" class="storage-status"></span>
+
+    <!-- Help button (top right). Opens the help window below. -->
+    <button id="help-button" class="help-button" type="button"
+            title="How to use the planner" aria-label="How to use the planner">?</button>
+  </header>
+
+  <!-- Add-a-booking form. The dropdown options are filled in by app.js. -->
+  <form id="add-form" class="add-form">
+    <strong>Add booking:</strong>
+    <label>User <select id="add-user"></select></label>
+    <label>Day <select id="add-day"></select></label>
+    <label>Start <select id="add-start"></select></label>
+    <label>End <select id="add-end"></select></label>
+    <span id="next-day-hint" class="next-day-hint"></span>
+    <button type="submit">Add</button>
+    <span id="add-message" class="add-message"></span>
+  </form>
+
+  <!-- Week navigation -->
+  <nav class="week-nav">
+    <button id="prev-week" type="button">‹ Previous week</button>
+    <span id="week-label" class="week-label"></span>
+    <button id="next-week" type="button">Next week ›</button>
+    <span class="tip">Tip: click a booking to edit or delete it · drag to move · hold Ctrl while dropping to copy · Esc cancels a drag</span>
+  </nav>
+
+  <!-- The planner grid is drawn inside this box by app.js -->
+  <main id="planner" class="planner"></main>
+
+  <!--
+    The "Edit booking" window. <dialog> is hidden until edit.js opens it.
+  -->
+  <dialog id="edit-dialog" class="edit-dialog">
+    <form id="edit-form">
+      <h2>Edit booking</h2>
+      <div class="edit-row">
+        <label>User <select id="edit-user"></select></label>
+        <label>Day <select id="edit-day"></select></label>
+      </div>
+      <div class="edit-row">
+        <label>Start <select id="edit-start"></select></label>
+        <label>End <select id="edit-end"></select></label>
+        <span id="edit-next-day-hint" class="next-day-hint"></span>
+      </div>
+      <p id="edit-message" class="add-message"></p>
+      <div class="edit-buttons">
+        <button type="submit" class="primary">Save</button>
+        <button type="button" id="edit-cancel">Cancel</button>
+        <button type="button" id="edit-delete" class="danger">Delete</button>
+      </div>
+      <hr>
+      <div class="edit-row">
+        <label>Copy to <select id="copy-day"></select></label>
+        <button type="button" id="copy-button">Copy</button>
+        <span class="next-day-hint">same start time and length</span>
+      </div>
+    </form>
+  </dialog>
+
+  <!--
+    The help window, opened by the "?" button. To change the help text,
+    just edit the text below.
+  -->
+  <dialog id="help-dialog" class="edit-dialog help-dialog">
+    <form method="dialog">
+      <!-- autofocus + tabindex make the window open scrolled to the top -->
+      <h2 tabindex="-1" autofocus>How to use the Booking Planner</h2>
+
+      <h3>🌍 Pick your time zone</h3>
+      <p>Use <b>Show times in</b> at the top to choose Copenhagen or Singapore.
+        All times on the page switch to that zone. Your choice is remembered
+        on this computer.</p>
+
+      <h3>➕ Book a time</h3>
+      <p>In the <b>Add booking</b> bar, choose your name, the day, and the start
+        and end time, then press <b>Add</b>. If the end time is earlier than
+        the start, the booking runs past midnight into the next day.</p>
+
+      <h3>✏️ Change or delete a booking</h3>
+      <p><b>Click</b> a booking. In the window that opens you can change the
+        name, day or times and press <b>Save</b>, or press <b>Delete</b>.</p>
+
+      <h3>↔️ Move a booking</h3>
+      <p><b>Drag</b> a booking to another time or day, and let go. It snaps to
+        15-minute steps. Press <b>Esc</b> while dragging to cancel.</p>
+
+      <h3>📋 Copy a booking</h3>
+      <p>Hold <b>Ctrl</b> while you drag and let go — the original stays and a
+        copy is made. Or click the booking and use <b>Copy to</b> a
+        different day (same start time and length).</p>
+
+      <h3>📅 Weeks</h3>
+      <p>You can book today and the next 13 days. Use <b>Previous week</b> /
+        <b>Next week</b> to switch weeks. Grey days are outside those 14 days.
+        Today is yellow.</p>
+
+      <h3>📏 Rules</h3>
+      <ul>
+        <li>Only one person can book a given time. If a time is taken, you'll
+          see a red message saying who has it.</li>
+        <li>Back-to-back is fine (one ends at 14:00, the next starts at 14:00).</li>
+        <li>A booking can be up to 24 hours long.</li>
+        <li>Old bookings are removed automatically about a day after they end.</li>
+      </ul>
+
+      <h3>👥 Shared</h3>
+      <p>Everyone who opens this link sees the same bookings, and changes show
+        up for everyone within a few seconds — no need to refresh. The label at
+        the top says <b>Live</b> when this is working.</p>
+
+      <div class="edit-buttons">
+        <button type="submit" class="primary">Got it</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!--
+    Firebase's own code, loaded from Google (the "compat" version works
+    with plain <script> tags, without any build tools).
+  -->
+  <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore-compat.js"></script>
+
+  <!--
+    Scripts load in this order: time.js (date helpers), bookings.js
+    (users + storing bookings), edit.js (the edit window), drag.js
+    (dragging), then app.js last, because app.js starts everything up
+    and needs the others to be loaded already.
+  -->
+  <script src="js/firebase-config.js"></script>
+  <script src="js/time.js"></script>
+  <script src="js/bookings.js"></script>
+  <script src="js/edit.js"></script>
+  <script src="js/drag.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

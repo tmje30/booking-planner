@@ -1,0 +1,248 @@
+/* style.css — how the page looks (colours, sizes, layout). */
+
+/* Colours and sizes kept in one place so they're easy to change.
+   "--name" defines a variable; var(--name) uses it. */
+:root {
+  --hour-height: 40px;      /* height of one hour row in the grid */
+  --time-col-width: 60px;   /* width of the hours column on the left */
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --line: #e2e5ea;
+  --line-strong: #c9ced6;
+  --text: #1f2430;
+  --muted: #6b7280;
+  --today: #fff7d6;
+  --outside: #eceef1;
+  --accent: #3b6fd8;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ---- Top bar ---- */
+.top-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  padding: 12px 68px 12px 20px; /* extra room on the right for the "?" button */
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  position: relative; /* lets the "?" button be pinned to this bar's corner */
+}
+.top-bar h1 { font-size: 20px; margin: 0; }
+.zone-switch select { font-size: 14px; padding: 4px 6px; margin-left: 4px; }
+.zone-status { margin: 0; color: var(--muted); font-size: 13px; }
+
+/* Storage status label: colour depends on the mode. */
+.storage-status {
+  margin-left: auto; /* pushes this and the help button to the right */
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.status-live { background: #e3f5e8; color: #1a7f37; }
+.status-test { background: #fff1d6; color: #9a5b00; }
+.status-connecting { background: #eceef1; color: var(--muted); }
+.status-error { background: #fde7e7; color: #c62828; }
+
+/* The round "?" help button, pinned to the top-right corner. */
+.help-button {
+  position: absolute;
+  top: 10px;
+  right: 20px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+  color: var(--accent);
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.help-button:hover { background: var(--accent); color: #fff; }
+
+/* ---- Add-booking form ---- */
+.add-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 12px 20px 0;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 14px;
+}
+.add-form select { font-size: 14px; padding: 3px 4px; margin-left: 4px; }
+.add-form button {
+  font-size: 14px;
+  padding: 5px 14px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+.next-day-hint { color: var(--muted); font-size: 13px; }
+.add-message { font-size: 13px; color: #1a7f37; }
+.add-message.is-error { color: #c62828; font-weight: 600; }
+
+/* ---- Week buttons ---- */
+.week-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+}
+.week-nav button {
+  font-size: 14px;
+  padding: 6px 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.week-nav button:disabled { opacity: 0.4; cursor: default; }
+.week-label { font-weight: 600; }
+.tip { margin-left: auto; color: var(--muted); font-size: 12px; }
+
+/* ---- Edit window ---- */
+.edit-dialog {
+  border: none;
+  border-radius: 10px;
+  padding: 18px 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  font-size: 14px;
+  min-width: 360px;
+}
+.edit-dialog::backdrop { background: rgba(0, 0, 0, 0.35); } /* dims the page behind */
+.edit-dialog h2 { margin: 0 0 12px; font-size: 18px; }
+.edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-bottom: 10px;
+}
+.edit-dialog select { font-size: 14px; padding: 3px 4px; margin-left: 4px; }
+.edit-dialog button {
+  font-size: 14px;
+  padding: 5px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  cursor: pointer;
+}
+.edit-dialog button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.edit-dialog button.danger { margin-left: auto; color: #c62828; border-color: #e3a5a5; }
+.edit-buttons { display: flex; gap: 8px; }
+.edit-dialog hr { border: none; border-top: 1px solid var(--line); margin: 14px 0 12px; }
+.edit-dialog .add-message { min-height: 1em; margin: 0 0 10px; }
+
+/* ---- Help window ---- */
+.help-dialog { max-width: 560px; max-height: 85vh; line-height: 1.45; }
+.help-dialog h3 { font-size: 15px; margin: 14px 0 4px; }
+.help-dialog p, .help-dialog ul { margin: 0 0 6px; }
+.help-dialog ul { padding-left: 20px; }
+.help-dialog .edit-buttons { justify-content: flex-end; margin-top: 14px; }
+
+/* ---- Planner grid ---- */
+.planner {
+  margin: 0 20px 20px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+/* Header row and body both use the same columns:
+   one narrow time column + 7 equal day columns. */
+.planner-head,
+.planner-body {
+  display: grid;
+  grid-template-columns: var(--time-col-width) repeat(7, 1fr);
+}
+
+/* The header row stays visible at the top while you scroll down. */
+.planner-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 8px 8px 0 0;
+}
+.day-header {
+  padding: 8px 6px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  border-left: 1px solid var(--line);
+}
+
+.hour-label {
+  height: var(--hour-height);
+  font-size: 11px;
+  color: var(--muted);
+  text-align: right;
+  padding-right: 6px;
+  transform: translateY(-7px); /* lines the label up with the hour line */
+}
+.hour-label:first-child { transform: none; }
+
+/* position: relative lets us place booking blocks inside a day later. */
+.day-column {
+  position: relative;
+  border-left: 1px solid var(--line);
+}
+.hour-cell {
+  height: var(--hour-height);
+  border-top: 1px solid var(--line);
+}
+.hour-cell:first-child { border-top: none; }
+
+/* A booking block. "absolute" means it's placed by exact position inside
+   its day column (top/height are set by app.js). */
+.booking {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  z-index: 1;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.3;
+  overflow: hidden;       /* text that doesn't fit is cut off (hover to see it all) */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  cursor: grab;          /* the "hand" cursor hints that it can be dragged */
+  user-select: none;     /* don't highlight text while dragging */
+}
+.booking:hover { filter: brightness(1.08); }
+
+/* While dragging: the preview is see-through and on top. */
+.booking.is-preview {
+  opacity: 0.8;
+  z-index: 3;
+  cursor: grabbing;
+  outline: 2px dashed #fff;
+}
+/* Can't drop here (clash or outside the window): red striped warning. */
+.booking.is-preview.has-problem {
+  outline: 3px solid #c62828;
+  background-image: repeating-linear-gradient(45deg,
+    rgba(0, 0, 0, 0.25) 0 6px, transparent 6px 12px);
+}
+
+/* Today is highlighted; days outside the 14-day window are greyed out. */
+.is-today { background: var(--today); }
+.outside-window { background: var(--outside); color: var(--muted); }
