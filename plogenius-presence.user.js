@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Booking Planner – plogenius "in use" signal
 // @namespace    https://tmje30.github.io/booking-planner/
-// @version      1.7.0
+// @version      1.8.0
 // @description  Shows the Booking Planner status when plogenius.com opens, and tells the planner who is using it.
 // @match        https://plogenius.com/*
 // @match        https://*.plogenius.com/*
@@ -35,8 +35,11 @@
 //    3 minutes the planner shows "Free".
 //
 // 3. So that a forgotten, idle window doesn't look "in use" forever:
-//    every 2 hours it asks "Still using plogenius?". If nobody clicks
-//    "Continue" within 10 minutes, it logs you out and shows the card again.
+//    it notices activity on plogenius (mouse, clicks, keys, scrolling — it
+//    only notices THAT you did something, not what). After 40 minutes with
+//    no activity it asks "Still using plogenius?". If nobody answers within
+//    10 minutes, your session ends and your current booking is DELETED, so
+//    the slot is free for others.
 //
 // 4. It adds a button to plogenius's top menu, right after "VIP":
 //    "Log out session" (marks plogenius as free in the planner — it does
@@ -69,8 +72,9 @@
 
   const SIGNAL_EVERY_MS = 60 * 1000;          // send "still here" once a minute
   const IN_USE_TIMEOUT_MS = 3 * 60 * 1000;    // same as the planner: no signal for 3 min = not in use
-  const CHECK_EVERY_MS = 2 * 60 * 60 * 1000;  // ask "still using?" every 2 hours
-  const ANSWER_WITHIN_MS = 10 * 60 * 1000;    // log out if no answer within 10 minutes
+  const IDLE_AFTER_MS = 40 * 60 * 1000;       // no activity for 40 min = ask "still using?"
+  const ANSWER_WITHIN_MS = 10 * 60 * 1000;    // no answer within 10 min = log out + delete booking
+  const IDLE_CHECK_EVERY_MS = 30 * 1000;      // how often we check for idleness
   const QUARTER_HOUR_MS = 15 * 60 * 1000;
   const HOUR_MS = 60 * 60 * 1000;
 
@@ -581,14 +585,13 @@
   // ---------- Logged in / logged out ----------
 
   let signalTimer = null;     // the once-a-minute signal
-  let checkTimer = null;      // the 2-hour "still using?" timer
+  let idleTimer = null;       // checks every 30 s whether you've gone idle
   let endTimer = null;        // fires when your booking runs out
   let currentBooking = null;  // the booking you're using now { id, startMs, endMs }
   let loggedIn = false;
 
   // Start a session for `booking`: signal once now, then once a minute.
-  // `isFresh` = a new session (sets "open since" to now); false when you
-  // click "Continue", so the planner keeps showing when you really started.
+  // `isFresh` = a new session (sets "open since" to now).
   function logIn(userName, booking, isFresh = true) {
     stopTimers();
     loggedIn = true;
@@ -596,7 +599,8 @@
     if (booking) currentBooking = booking;
     sendSignal(userName, isFresh);
     signalTimer = setInterval(() => sendSignal(userName, false), SIGNAL_EVERY_MS);
-    checkTimer = setTimeout(() => askStillUsing(userName), CHECK_EVERY_MS);
+    noteActivity(true); // starting a session counts as activity
+    idleTimer = setInterval(() => checkIdle(userName), IDLE_CHECK_EVERY_MS);
     scheduleBookingEnd(userName);
   }
 
@@ -619,42 +623,99 @@
 
   function stopTimers() {
     clearInterval(signalTimer);
-    clearTimeout(checkTimer);
+    clearInterval(idleTimer);
     clearTimeout(endTimer);
   }
 
-  // Every 2 hours: "Still using plogenius?" with a 10-minute countdown.
-  function askStillUsing(userName) {
+  // ---------- Idle check ----------
+  //
+  // We remember when you last did something on plogenius. That time is
+  // shared between all your plogenius windows (GM_setValue storage lives in
+  // Tampermonkey), so being active in ANY plogenius window counts.
+
+  let lastActivityHere = Date.now(); // last activity in this window
+  let lastSharedSave = 0;            // when we last saved it to shared storage
+  let idlePanelOpen = false;         // the "still using?" pop-up is showing
+
+  // Called on every mouse move, click, key press or scroll. It's cheap:
+  // it only saves to shared storage at most every 30 seconds.
+  function noteActivity(force = false) {
+    if (idlePanelOpen && !force) return; // only a button click answers the pop-up
+    lastActivityHere = Date.now();
+    if (force || lastActivityHere - lastSharedSave > 30 * 1000) {
+      lastSharedSave = lastActivityHere;
+      GM_setValue("lastActivity", lastActivityHere);
+    }
+  }
+  for (const type of ["mousemove", "mousedown", "keydown", "wheel", "scroll", "touchstart"]) {
+    // `capture: true` = we hear it before the page does; `passive` = we
+    // never block it. We don't look at WHAT you did, only that you did.
+    window.addEventListener(type, () => noteActivity(), { capture: true, passive: true });
+  }
+
+  // The latest activity in any plogenius window.
+  function lastActivityAnywhere() {
+    return Math.max(lastActivityHere, GM_getValue("lastActivity", 0));
+  }
+
+  // Runs every 30 seconds during a session.
+  function checkIdle(userName) {
+    if (idlePanelOpen) return;
+    if (Date.now() - lastActivityAnywhere() >= IDLE_AFTER_MS) askStillActive(userName);
+  }
+
+  // "Still using plogenius?" with a 10-minute countdown. No answer =
+  // log out and delete your current booking.
+  function askStillActive(userName) {
+    idlePanelOpen = true;
+    const shownAt = Date.now();
     let secondsLeft = ANSWER_WITHIN_MS / 1000;
-    const countdownText = () => {
-      const minutes = Math.floor(secondsLeft / 60);
-      const seconds = String(secondsLeft % 60).padStart(2, "0");
-      return ["If you don't answer, you'll be logged out in " + minutes + ":" + seconds + ",",
-              "so an idle window doesn't show as \"in use\"."];
-    };
+    const countdownText = () => [
+      "No activity on plogenius for 40 minutes.",
+      "If you don't answer within " + Math.floor(secondsLeft / 60) + ":" +
+        String(secondsLeft % 60).padStart(2, "0") +
+        ", your session ends and your booking is deleted, so the slot is free for others.",
+    ];
+
+    const finish = () => { clearInterval(countdown); idlePanelOpen = false; };
 
     const panel = showPanel({
       title: "Still using plogenius?",
       lines: countdownText(),
       buttons: [
-        { label: "Continue", color: "#1a7f37",
-          onClick: () => { clearInterval(countdown); logIn(userName, null, false); } },
-        { label: "Log out", color: "#6b7280",
-          onClick: () => { clearInterval(countdown); logOut(userName); } },
+        { label: "I'm still here", color: "#1a7f37",
+          onClick: () => { finish(); noteActivity(true); } },
+        { label: "Log out session", color: "#6b7280",
+          onClick: () => { finish(); logOut(userName); } },
       ],
     });
 
-    // Tick the countdown once a second; log out when it reaches 0.
     const countdown = setInterval(() => {
+      // Answered in another plogenius window (or active there)? Then close.
+      if (GM_getValue("lastActivity", 0) > shownAt) {
+        finish();
+        panel.close();
+        return;
+      }
       secondsLeft -= 1;
       if (secondsLeft <= 0) {
-        clearInterval(countdown);
+        finish();
         panel.close();
-        logOut(userName, "Logged out (no answer)");
+        const booking = currentBooking;
+        // Wait for the deletion to finish before showing the card, so the
+        // card doesn't still show the booking.
+        (booking ? deleteBooking(booking.id) : Promise.resolve()).then(() =>
+          logOut(userName, "Logged out: no activity" + (booking ? " (your booking was removed)" : "")));
       } else {
         panel.setText(countdownText());
       }
     }, 1000);
+  }
+
+  // Delete a booking from the planner.
+  // Returns a Promise that finishes when the deletion is done (or failed).
+  function deleteBooking(bookingId) {
+    return firestoreRequest("DELETE", API_BASE + DOCS_PATH + "/bookings/" + bookingId).catch(() => {});
   }
 
   // ---------- The button in plogenius's top menu ----------

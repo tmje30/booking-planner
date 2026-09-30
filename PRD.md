@@ -78,11 +78,15 @@ only save bookings on each person's own computer, so we need shared storage.
   "Extend until <next booking>" (extends the same booking), or "Log out";
   no answer in 10 minutes = logged out. If the booking was extended in
   the planner meanwhile, it just waits for the new end.
-  Idle check (added 2026-09-29): every 2 hours the helper asks "Still
-  using plogenius?" [Continue] [Log out]. No answer within 10 minutes =
-  logged out (signals stop and the presence entry is removed, so the
-  planner shows "free" at once), and the status card appears again. Closing the window stops the signals too (free after
-  ~3 minutes); the chosen name stays remembered.
+  Idle check (CHANGED 2026-09-30, replaces the old 2-hour check): the
+  helper notices activity on plogenius (mouse, clicks, keys, scroll —
+  only that something happened, not what), shared across all plogenius
+  windows. After 40 minutes with no activity: "Still using plogenius?"
+  [I'm still here] [Log out session]. No answer within 10 minutes = the
+  current booking is DELETED, the session is logged out (planner shows
+  "free" at once) and the status card appears. Activity in another
+  plogenius window also closes the question. Closing the window stops the
+  signals too (free after ~3 minutes); the chosen name stays remembered.
 
 ## Explicitly out of scope
 - User logins / passwords
