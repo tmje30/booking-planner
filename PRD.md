@@ -62,6 +62,11 @@ only save bookings on each person's own computer, so we need shared storage.
   has it booked right now: NO start buttons (one user at a time). If it's
   your own booking now: "Start (your booking until ...)". Always: "Open
   full planner" and "Not now". Also shown after being logged out.
+  Menu button (added 2026-09-30): the helper adds a button after "VIP" in
+  plogenius's top menu. In a session: "⏻ Log out session" = quietly mark
+  plogenius as free in the planner (no card; does NOT log out of
+  plogenius). Not in a session: "▶ Start session" = open the booking
+  card. It re-adds itself if plogenius redraws its menu.
   No card during your own booking (added 2026-09-30): opening plogenius
   (e.g. an extra window) during your own booked time, with nobody else on
   it, starts you straight away with no card. If someone else is still on

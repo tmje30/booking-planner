@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Booking Planner – plogenius "in use" signal
 // @namespace    https://tmje30.github.io/booking-planner/
-// @version      1.6.0
+// @version      1.7.0
 // @description  Shows the Booking Planner status when plogenius.com opens, and tells the planner who is using it.
 // @match        https://plogenius.com/*
 // @match        https://*.plogenius.com/*
@@ -37,6 +37,11 @@
 // 3. So that a forgotten, idle window doesn't look "in use" forever:
 //    every 2 hours it asks "Still using plogenius?". If nobody clicks
 //    "Continue" within 10 minutes, it logs you out and shows the card again.
+//
+// 4. It adds a button to plogenius's top menu, right after "VIP":
+//    "Log out session" (marks plogenius as free in the planner — it does
+//    NOT log you out of plogenius itself), or "Start session" when you're
+//    not in one (opens the booking card).
 //
 // It sends ONLY your chosen name, the time, and bookings you make from the
 // card. It does not read anything from the plogenius page.
@@ -587,6 +592,7 @@
   function logIn(userName, booking, isFresh = true) {
     stopTimers();
     loggedIn = true;
+    updateMenuButton();
     if (booking) currentBooking = booking;
     sendSignal(userName, isFresh);
     signalTimer = setInterval(() => sendSignal(userName, false), SIGNAL_EVERY_MS);
@@ -601,12 +607,14 @@
     endTimer = setTimeout(() => onBookingEnded(userName), Math.max(0, currentBooking.endMs - Date.now()));
   }
 
-  function logOut(userName, heading) {
+  // `silent` = don't show the card afterwards (used by the menu button).
+  function logOut(userName, heading, silent = false) {
     stopTimers();
     loggedIn = false;
     currentBooking = null;
     removeSignal(userName);
-    showStatusCard(userName, heading || "Logged out");
+    updateMenuButton();
+    if (!silent) showStatusCard(userName, heading || "Logged out");
   }
 
   function stopTimers() {
@@ -649,7 +657,96 @@
     }, 1000);
   }
 
+  // ---------- The button in plogenius's top menu ----------
+  //
+  // plogenius builds its page with JavaScript and may redraw its menu at
+  // any time, which would wipe out our button. So we keep an eye on the
+  // page (a "MutationObserver" = "tell me whenever the page changes") and
+  // put the button back after "VIP" whenever it has gone missing.
+
+  let menuButtonHost = null; // the element holding our button
+  let menuButton = null;     // the button itself
+
+  function makeMenuButton() {
+    menuButtonHost = document.createElement("span");
+    menuButtonHost.style.cssText = "display:inline-flex;align-items:center;margin-left:14px;";
+    // Shadow root again: plogenius's styles can't change our button.
+    const root = menuButtonHost.attachShadow({ mode: "open" });
+    root.innerHTML = `
+      <style>
+        button { font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+                 padding: 5px 12px; border-radius: 8px; border: 1px solid currentColor;
+                 background: transparent; white-space: nowrap; }
+        button.out { color: #f87171; }   /* red-ish: "Log out session" */
+        button.in  { color: #4ade80; }   /* green: "Start session" */
+        button:hover { background: rgba(255, 255, 255, 0.08); }
+      </style>
+      <button type="button"></button>`;
+    menuButton = root.querySelector("button");
+    menuButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation(); // don't let plogenius react to this click
+      const name = GM_getValue("userName", null);
+      if (!name) { showNamePicker((n) => showStatusCard(n)); return; }
+      if (loggedIn) {
+        logOut(name, null, true); // quietly mark the session as free
+      } else {
+        showStatusCard(name);     // show the card to book / start
+      }
+    });
+    updateMenuButton();
+  }
+
+  // Set the button's text to match whether you're in a session.
+  function updateMenuButton() {
+    if (!menuButton) return;
+    menuButton.textContent = loggedIn ? "⏻ Log out session" : "▶ Start session";
+    menuButton.className = loggedIn ? "out" : "in";
+    menuButton.title = loggedIn
+      ? "Tell the Booking Planner you're done (you stay logged in to plogenius)"
+      : "Book time and start a Booking Planner session";
+  }
+
+  // Find plogenius's "VIP" menu item near the top of the page. Returns the
+  // outermost element that contains just "VIP" (so we go after its icon too).
+  function findVipMenuItem() {
+    // XPath: "any element whose own text is exactly VIP".
+    const found = document.evaluate("//body//*[normalize-space(text())='VIP']",
+      document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+    for (let i = 0; i < found.snapshotLength; i++) {
+      let el = found.snapshotItem(i);
+      const box = el.getBoundingClientRect();
+      if (box.width === 0 || box.top > 150) continue; // hidden, or not in the top menu
+      while (el.parentElement && el.parentElement.textContent.trim() === "VIP") {
+        el = el.parentElement;
+      }
+      return el;
+    }
+    return null;
+  }
+
+  // Put the button after "VIP" if it isn't on the page right now.
+  function placeMenuButton() {
+    if (menuButtonHost && menuButtonHost.isConnected) return; // already there
+    const vip = findVipMenuItem();
+    if (!vip) return; // menu not drawn yet; we'll try again on the next change
+    if (!menuButtonHost) makeMenuButton();
+    vip.insertAdjacentElement("afterend", menuButtonHost);
+  }
+
+  function startMenuButton() {
+    placeMenuButton();
+    let waiting = false;
+    new MutationObserver(() => {
+      if (waiting) return; // at most one check every 0.2 seconds
+      waiting = true;
+      setTimeout(() => { waiting = false; placeMenuButton(); }, 200);
+    }).observe(document.documentElement, { childList: true, subtree: true });
+  }
+
   // ---------- Start ----------
+
+  startMenuButton();
 
   // Items in the Tampermonkey icon's menu.
   GM_registerMenuCommand("Show Booking Planner status", () => {
