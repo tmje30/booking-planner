@@ -62,6 +62,11 @@ only save bookings on each person's own computer, so we need shared storage.
   has it booked right now: NO start buttons (one user at a time). If it's
   your own booking now: "Start (your booking until ...)". Always: "Open
   full planner" and "Not now". Also shown after being logged out.
+  No card during your own booking (added 2026-09-30): opening plogenius
+  (e.g. an extra window) during your own booked time, with nobody else on
+  it, starts you straight away with no card. If someone else is still on
+  it during your booked time, the card shows that and offers "Start".
+  After logging out, the card always shows (no automatic start).
   Booking end (added 2026-09-29): when your booking runs out, a card
   shows who's next. Someone booked straight after you = logged out at
   once (card shows who). Otherwise: "Extend 1 hour", "Extend 2 hours" or

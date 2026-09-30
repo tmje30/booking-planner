@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Booking Planner – plogenius "in use" signal
 // @namespace    https://tmje30.github.io/booking-planner/
-// @version      1.5.0
+// @version      1.6.0
 // @description  Shows the Booking Planner status when plogenius.com opens, and tells the planner who is using it.
 // @match        https://plogenius.com/*
 // @match        https://*.plogenius.com/*
@@ -361,7 +361,10 @@
   // ---------- The status card (when plogenius opens) ----------
 
   // Shown when plogenius opens, and after you've been logged out.
-  async function showStatusCard(userName, heading) {
+  // `isOpening` = plogenius was just opened (not after a log-out). Then,
+  // if it's your own booked time and nobody else is on plogenius, we start
+  // straight away with no pop-up (handy when you open extra windows).
+  async function showStatusCard(userName, heading, isOpening = false) {
     let status;
     try {
       status = await loadPlannerStatus();
@@ -371,7 +374,7 @@
         lines: ["Couldn't load the planner (" + error.message + ").",
                 "Check your internet connection, then try again."],
         buttons: [
-          { label: "Try again", color: "#1a7f37", onClick: () => showStatusCard(userName, heading) },
+          { label: "Try again", color: "#1a7f37", onClick: () => showStatusCard(userName, heading, isOpening) },
           openPlannerButton(),
         ],
         smallLink: { label: "Not now" },
@@ -397,6 +400,14 @@
     // Line 2: who has it booked right now, and whose booking is next.
     const bookedNow = status.upcomingBookings.find((b) => b.startMs <= now);
     const next = status.upcomingBookings.find((b) => b.startMs > now);
+    const myBookingNow = bookedNow && bookedNow.user === userName;
+
+    // Your own booked time, nobody else on plogenius, just opened: start
+    // quietly, no card.
+    if (isOpening && myBookingNow && others.length === 0) {
+      logIn(userName, bookedNow);
+      return;
+    }
     if (bookedNow) {
       lines.push("Booked now: " + (bookedNow.user === userName ? "you" : bookedNow.user) +
                  " until " + timeText(bookedNow.endMs));
@@ -411,17 +422,22 @@
     // Buttons. Only one person can use plogenius at a time, and you can
     // only start by booking (or with your own booking that's on now).
     let buttons = [];
-    if (others.length > 0) {
-      lines.push("Only one person can use plogenius at a time. Check the planner for a free slot.");
-    } else if (bookedNow && bookedNow.user !== userName) {
-      lines.push("It's " + bookedNow.user + "'s booked time. Check the planner for a free slot.");
-    } else if (bookedNow) {
-      // It's your own booking right now: just start.
+    if (myBookingNow) {
+      // It's your own booking right now: you can start (even if someone
+      // else is still on plogenius past their time).
+      if (others.length > 0) {
+        lines.push("It's your booked time, but " + others.map((p) => p.user).join(" and ") +
+                   " is still on plogenius.");
+      }
       buttons.push({
         label: "Start (your booking until " + timeText(bookedNow.endMs) + ")",
         color: "#1a7f37",
         onClick: () => logIn(userName, bookedNow),
       });
+    } else if (others.length > 0) {
+      lines.push("Only one person can use plogenius at a time. Check the planner for a free slot.");
+    } else if (bookedNow) {
+      lines.push("It's " + bookedNow.user + "'s booked time. Check the planner for a free slot.");
     } else {
       // Free: book from the current quarter hour (the planner's 15-minute steps).
       const startMs = Math.floor(now / QUARTER_HOUR_MS) * QUARTER_HOUR_MS;
@@ -652,8 +668,8 @@
   // if this computer hasn't chosen one yet).
   const savedName = GM_getValue("userName", null);
   if (USERS.some((u) => u.name === savedName)) {
-    showStatusCard(savedName);
+    showStatusCard(savedName, null, true);
   } else {
-    showNamePicker((name) => showStatusCard(name));
+    showNamePicker((name) => showStatusCard(name, null, true));
   }
 })();
