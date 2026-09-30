@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Booking Planner – plogenius "in use" signal
 // @namespace    https://tmje30.github.io/booking-planner/
-// @version      1.8.0
+// @version      1.9.0
 // @description  Shows the Booking Planner status when plogenius.com opens, and tells the planner who is using it.
 // @match        https://plogenius.com/*
 // @match        https://*.plogenius.com/*
@@ -192,7 +192,7 @@
       host.style.zoom = String(100 / realWidth);
     }
 
-    return { close, setText };
+    return { close, setText, isOpen: () => host.isConnected };
   }
 
   // ---------- Time helpers ----------
@@ -369,16 +369,22 @@
 
   // ---------- The status card (when plogenius opens) ----------
 
+  // The status card that's showing right now (so it can be refreshed):
+  // { panel, userName, heading }, or null.
+  let statusCard = null;
+
   // Shown when plogenius opens, and after you've been logged out.
   // `isOpening` = plogenius was just opened (not after a log-out). Then,
   // if it's your own booked time and nobody else is on plogenius, we start
   // straight away with no pop-up (handy when you open extra windows).
-  async function showStatusCard(userName, heading, isOpening = false) {
+  // `isRefresh` = redraw an open card with up-to-date times and bookings.
+  async function showStatusCard(userName, heading, isOpening = false, isRefresh = false) {
     let status;
     try {
       status = await loadPlannerStatus();
     } catch (error) {
-      showPanel({
+      if (isRefresh) return; // keep the card that's there; try again next time
+      replaceStatusCard(userName, heading, showPanel({
         title: heading || "Booking Planner",
         lines: ["Couldn't load the planner (" + error.message + ").",
                 "Check your internet connection, then try again."],
@@ -387,9 +393,13 @@
           openPlannerButton(),
         ],
         smallLink: { label: "Not now" },
-      });
+      }));
       return;
     }
+
+    // A refresh, but meanwhile you clicked something on the card (or
+    // started a session)? Then don't bring the card back.
+    if (isRefresh && (loggedIn || !statusCard || !statusCard.panel.isOpen())) return;
 
     const now = Date.now();
     const lines = [];
@@ -459,13 +469,31 @@
     }
     buttons.push(openPlannerButton());
 
-    showPanel({
+    replaceStatusCard(userName, heading, showPanel({
       title: heading || "Booking Planner",
       lines: lines,
       buttons: buttons,
       smallLink: { label: "Not now (you won't show as \"in use\")" },
-    });
+    }));
   }
+
+  // Remember the new card, and remove the previous one if it's still open
+  // (so a refresh swaps the card instead of stacking a second one on top).
+  function replaceStatusCard(userName, heading, panel) {
+    if (statusCard && statusCard.panel !== panel && statusCard.panel.isOpen()) statusCard.panel.close();
+    statusCard = { panel, userName, heading };
+  }
+
+  // Redraw the card with current times, if it's open. Runs once a minute,
+  // and straight away when you switch back to this plogenius window.
+  function refreshStatusCard() {
+    if (statusCard && statusCard.panel.isOpen() && !loggedIn) {
+      showStatusCard(statusCard.userName, statusCard.heading, false, true);
+    }
+  }
+  setInterval(refreshStatusCard, 60 * 1000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshStatusCard(); });
+  window.addEventListener("focus", refreshStatusCard);
 
   function openPlannerButton() {
     return {
