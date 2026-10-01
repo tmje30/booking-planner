@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Booking Planner – plogenius "in use" signal
 // @namespace    https://tmje30.github.io/booking-planner/
-// @version      1.10.0
+// @version      1.11.0
 // @description  Shows the Booking Planner status when plogenius.com opens, and tells the planner who is using it.
 // @match        https://plogenius.com/*
 // @match        https://*.plogenius.com/*
@@ -771,14 +771,16 @@
 
   function makeMenuButton() {
     menuButtonHost = document.createElement("span");
-    menuButtonHost.style.cssText = "display:inline-flex;align-items:center;margin-left:14px;";
+    menuButtonHost.style.cssText = "display:inline-flex;align-items:center;margin-left:0.8em;";
     // Shadow root again: plogenius's styles can't change our button.
     const root = menuButtonHost.attachShadow({ mode: "open" });
     root.innerHTML = `
       <style>
-        button { font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
-                 padding: 5px 12px; border-radius: 8px; border: 1px solid currentColor;
-                 background: transparent; white-space: nowrap; }
+        /* Sizes in "em" = relative to the text size, which is set to
+           slightly bigger than plogenius's "VIP" label (see placeMenuButton). */
+        button { font: inherit; font-size: 1em; font-weight: 600; cursor: pointer;
+                 padding: 0.3em 0.8em; border-radius: 0.4em; border: 2px solid currentColor;
+                 background: transparent; white-space: nowrap; line-height: 1.2; }
         button.out { color: #f87171; }   /* red-ish: "Log out session" */
         button.in  { color: #4ade80; }   /* green: "Start session" */
         button:hover { background: rgba(255, 255, 255, 0.08); }
@@ -809,20 +811,23 @@
       : "Book time and start a Booking Planner session";
   }
 
-  // Find plogenius's "VIP" menu item near the top of the page. Returns the
-  // outermost element that contains just "VIP" (so we go after its icon too).
+  // Find plogenius's "VIP" menu item near the top of the page. Returns
+  // { item, label }: `item` = the outermost element that contains just
+  // "VIP" (so we go after its icon too), `label` = the element holding the
+  // word itself (we copy its text size).
   function findVipMenuItem() {
     // XPath: "any element whose own text is exactly VIP".
     const found = document.evaluate("//body//*[normalize-space(text())='VIP']",
       document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
     for (let i = 0; i < found.snapshotLength; i++) {
-      let el = found.snapshotItem(i);
-      const box = el.getBoundingClientRect();
+      const label = found.snapshotItem(i);
+      const box = label.getBoundingClientRect();
       if (box.width === 0 || box.top > 150) continue; // hidden, or not in the top menu
-      while (el.parentElement && el.parentElement.textContent.trim() === "VIP") {
-        el = el.parentElement;
+      let item = label;
+      while (item.parentElement && item.parentElement.textContent.trim() === "VIP") {
+        item = item.parentElement;
       }
-      return el;
+      return { item, label };
     }
     return null;
   }
@@ -833,7 +838,10 @@
     const vip = findVipMenuItem();
     if (!vip) return; // menu not drawn yet; we'll try again on the next change
     if (!menuButtonHost) makeMenuButton();
-    vip.insertAdjacentElement("afterend", menuButtonHost);
+    // Text size: 10% bigger than the "VIP" label's.
+    const vipSize = parseFloat(getComputedStyle(vip.label).fontSize) || 16;
+    menuButtonHost.style.fontSize = (vipSize * 1.1) + "px";
+    vip.item.insertAdjacentElement("afterend", menuButtonHost);
   }
 
   function startMenuButton() {
