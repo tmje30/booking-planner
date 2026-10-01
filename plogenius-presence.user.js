@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Booking Planner – plogenius "in use" signal
 // @namespace    https://tmje30.github.io/booking-planner/
-// @version      1.9.0
+// @version      1.10.0
 // @description  Shows the Booking Planner status when plogenius.com opens, and tells the planner who is using it.
 // @match        https://plogenius.com/*
 // @match        https://*.plogenius.com/*
@@ -359,7 +359,8 @@
     const gapMs = limitMs - fromMs;
     if (nextBooking && gapMs >= QUARTER_HOUR_MS && gapMs < 2 * HOUR_MS && gapMs !== HOUR_MS) {
       buttons.push({
-        label: verb + " until " + timeText(limitMs) + " (" + nextBooking.user + " is next)",
+        label: verb + " until " + timeText(limitMs) + " (" +
+               (nextBooking.user === GM_getValue("userName", null) ? "your next booking" : nextBooking.user + " is next") + ")",
         color: "#3a8f5a",
         onClick: () => onPick(limitMs),
       });
@@ -541,6 +542,17 @@
     }
 
     const endedAt = currentBooking ? currentBooking.endMs : Date.now();
+
+    // Your own next booking starts right away (back-to-back, or within a
+    // minute)? Then just carry on into it: no card, no log-out.
+    const myNextBooking = status.upcomingBookings.find((b) =>
+      b.user === userName && (!currentBooking || b.id !== currentBooking.id) &&
+      b.startMs <= endedAt + 60 * 1000 && b.endMs > Date.now());
+    if (myNextBooking) {
+      currentBooking = myNextBooking;
+      scheduleBookingEnd(userName);
+      return;
+    }
     const choices = bookingChoices(endedAt, status.upcomingBookings,
       currentBooking && currentBooking.id, "Extend",
       (newEndMs) => extendBooking(userName, newEndMs));
@@ -555,7 +567,8 @@
     let secondsLeft = ANSWER_WITHIN_MS / 1000;
     const next = choices.nextBooking;
     const infoLines = () => [
-      next ? "Next booking: " + next.user + ", " + dayText(next.startMs) + " at " + timeText(next.startMs)
+      next ? "Next booking: " + (next.user === userName ? "you" : next.user) + ", " +
+               dayText(next.startMs) + " at " + timeText(next.startMs)
            : "Nobody is booked after you.",
       "Extend your booking, or log out. You'll be logged out automatically in " +
         Math.floor(secondsLeft / 60) + ":" + String(secondsLeft % 60).padStart(2, "0") + ".",
