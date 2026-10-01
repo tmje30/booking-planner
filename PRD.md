@@ -66,7 +66,7 @@ only save bookings on each person's own computer, so we need shared storage.
   itself once a minute and immediately when you switch to that plogenius
   window, so its times, bookings and Book buttons are never stale.
   Menu button (added 2026-09-30): the helper adds a button after "VIP" in
-  plogenius's top menu. In a session: "⏻ Log out session" = quietly mark
+  plogenius's top menu. In a session: "⏻ Log out scheduler" = quietly mark
   plogenius as free in the planner (no card; does NOT log out of
   plogenius). Not in a session: "▶ Start session" = open the booking
   card. It re-adds itself if plogenius redraws its menu.
@@ -88,7 +88,7 @@ only save bookings on each person's own computer, so we need shared storage.
   helper notices activity on plogenius (mouse, clicks, keys, scroll —
   only that something happened, not what), shared across all plogenius
   windows. After 40 minutes with no activity: "Still using plogenius?"
-  [I'm still here] [Log out session]. No answer within 10 minutes = the
+  [I'm still here] [Log out scheduler]. No answer within 10 minutes = the
   current booking is DELETED, the session is logged out (planner shows
   "free" at once) and the status card appears. Activity in another
   plogenius window also closes the question. Closing the window stops the

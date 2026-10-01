@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Booking Planner – plogenius "in use" signal
 // @namespace    https://tmje30.github.io/booking-planner/
-// @version      1.12.0
+// @version      1.13.0
 // @description  Shows the Booking Planner status when plogenius.com opens, and tells the planner who is using it.
 // @match        https://plogenius.com/*
 // @match        https://*.plogenius.com/*
@@ -42,7 +42,7 @@
 //    the slot is free for others.
 //
 // 4. It adds a button to plogenius's top menu, right after "VIP":
-//    "Log out session" (marks plogenius as free in the planner — it does
+//    "Log out scheduler" (marks plogenius as free in the planner — it does
 //    NOT log you out of plogenius itself), or "Start session" when you're
 //    not in one (opens the booking card).
 //
@@ -726,7 +726,7 @@
       buttons: [
         { label: "I'm still here", color: "#1a7f37",
           onClick: () => { finish(); noteActivity(true); } },
-        { label: "Log out session", color: "#6b7280",
+        { label: "Log out scheduler", color: "#6b7280",
           onClick: () => { finish(); logOut(userName); } },
       ],
     });
@@ -781,7 +781,7 @@
         button { font: inherit; font-size: 1em; font-weight: 600; cursor: pointer;
                  padding: 0.3em 0.8em; border-radius: 0.4em; border: 2px solid currentColor;
                  background: transparent; white-space: nowrap; line-height: 1.2; }
-        button.out { color: #f87171; }   /* red-ish: "Log out session" */
+        button.out { color: #f87171; }   /* red-ish: "Log out scheduler" */
         button.in  { color: #4ade80; }   /* green: "Start session" */
         button:hover { background: rgba(255, 255, 255, 0.08); }
       </style>
@@ -804,7 +804,7 @@
   // Set the button's text to match whether you're in a session.
   function updateMenuButton() {
     if (!menuButton) return;
-    menuButton.textContent = loggedIn ? "⏻ Log out session" : "▶ Start session";
+    menuButton.textContent = loggedIn ? "⏻ Log out scheduler" : "▶ Start session";
     menuButton.className = loggedIn ? "out" : "in";
     menuButton.title = loggedIn
       ? "Tell the Booking Planner you're done (you stay logged in to plogenius)"
