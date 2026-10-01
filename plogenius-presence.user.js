@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Booking Planner – plogenius "in use" signal
 // @namespace    https://tmje30.github.io/booking-planner/
-// @version      1.15.0
+// @version      1.16.0
 // @description  Shows the Booking Planner status when plogenius.com opens, and tells the planner who is using it.
 // @match        https://plogenius.com/*
 // @match        https://*.plogenius.com/*
@@ -584,8 +584,21 @@
     };
   }
 
+  // Does [startMs, endMs) overlap any booking (other than `ignoreId`)?
+  function findOverlap(bookings, startMs, endMs, ignoreId) {
+    return bookings.find((b) => b.id !== ignoreId && b.startMs < endMs && startMs < b.endMs);
+  }
+
   async function bookAndStart(userName, startMs, endMs) {
     try {
+      // Check again right now: the card may have been open a while, and
+      // someone may have booked or started in the meantime.
+      const status = await loadPlannerStatus();
+      const someoneOn = status.activeUsers.some((p) => p.user !== userName);
+      if (someoneOn || findOverlap(status.upcomingBookings, startMs, endMs, null)) {
+        showStatusCard(userName, "That time was just taken");
+        return;
+      }
       const booking = await createBooking(userName, startMs, endMs);
       logIn(userName, booking);
     } catch (error) {
@@ -643,6 +656,10 @@
       return;
     }
 
+    // The deadline is a real clock time. Browsers slow down timers in
+    // background tabs (to about once a minute), so we don't count seconds
+    // ourselves; we look at the clock each time instead.
+    const deadline = Date.now() + ANSWER_WITHIN_MS;
     let secondsLeft = ANSWER_WITHIN_MS / 1000;
     const next = choices.nextBooking;
     const infoLines = () => [
@@ -664,7 +681,7 @@
 
     // Tick the countdown once a second; log out when it reaches 0.
     const countdown = setInterval(() => {
-      secondsLeft -= 1;
+      secondsLeft = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
       if (secondsLeft <= 0) {
         clearInterval(countdown);
         panel.close();
@@ -677,6 +694,15 @@
 
   async function extendBooking(userName, newEndMs) {
     try {
+      // Check again right now: the card may have been open a while, and
+      // someone may have booked the time in the meantime. If so, show the
+      // card again with up-to-date choices instead.
+      const status = await loadPlannerStatus();
+      if (newEndMs <= Date.now() ||
+          findOverlap(status.upcomingBookings, currentBooking.endMs, newEndMs, currentBooking.id)) {
+        onBookingEnded(userName);
+        return;
+      }
       await changeBookingEnd(currentBooking.id, newEndMs);
       currentBooking.endMs = newEndMs;
       scheduleBookingEnd(userName);
@@ -789,6 +815,10 @@
   function askStillActive(userName) {
     idlePanelOpen = true;
     const shownAt = Date.now();
+    // The deadline is a real clock time. Browsers slow down timers in
+    // background tabs (to about once a minute), so we don't count seconds
+    // ourselves; we look at the clock each time instead.
+    const deadline = Date.now() + ANSWER_WITHIN_MS;
     let secondsLeft = ANSWER_WITHIN_MS / 1000;
     const countdownText = () => [
       "No activity on plogenius for 40 minutes.",
@@ -817,7 +847,7 @@
         panel.close();
         return;
       }
-      secondsLeft -= 1;
+      secondsLeft = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
       if (secondsLeft <= 0) {
         finish();
         panel.close();

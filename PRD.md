@@ -75,6 +75,14 @@ only save bookings on each person's own computer, so we need shared storage.
   it, starts you straight away with no card. If someone else is still on
   it during your booked time, the card shows that and offers "Start".
   After logging out, the card always shows (no automatic start).
+  Overlap fix (2026-10-01): two Baby4Life bookings overlapped on Thu
+  (10:15-12:15 and 11:30-15:30 SGT). Firestore timestamps showed the first
+  was extended at 12:08 from an end card shown at 11:15 (should have timed
+  out at 11:25); the second had been booked at 11:41 in between. Likely
+  cause: browsers slow timers in background tabs, so the countdown barely
+  moved, and Extend didn't re-check. Fixed: countdowns use the real clock,
+  and Extend / Book re-check the planner at the moment of the click (if
+  the time was taken, a fresh card is shown instead).
   No-show rule (added 2026-10-01): if a booking has started and its owner
   hasn't been on the scheduler (presence signal) since its start within
   20 minutes, the first 2 hours are removed (whole booking if <= 2 h;
