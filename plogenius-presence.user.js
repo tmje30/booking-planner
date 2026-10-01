@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Booking Planner – plogenius "in use" signal
 // @namespace    https://tmje30.github.io/booking-planner/
-// @version      1.11.0
+// @version      1.12.0
 // @description  Shows the Booking Planner status when plogenius.com opens, and tells the planner who is using it.
 // @match        https://plogenius.com/*
 // @match        https://*.plogenius.com/*
@@ -838,9 +838,9 @@
     const vip = findVipMenuItem();
     if (!vip) return; // menu not drawn yet; we'll try again on the next change
     if (!menuButtonHost) makeMenuButton();
-    // Text size: 10% bigger than the "VIP" label's.
+    // Text size: 70% bigger than the "VIP" label's.
     const vipSize = parseFloat(getComputedStyle(vip.label).fontSize) || 16;
-    menuButtonHost.style.fontSize = (vipSize * 1.1) + "px";
+    menuButtonHost.style.fontSize = (vipSize * 1.7) + "px";
     vip.item.insertAdjacentElement("afterend", menuButtonHost);
   }
 
