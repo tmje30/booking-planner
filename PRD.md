@@ -75,6 +75,15 @@ only save bookings on each person's own computer, so we need shared storage.
   it, starts you straight away with no card. If someone else is still on
   it during your booked time, the card shows that and offers "Start".
   After logging out, the card always shows (no automatic start).
+  No-show rule (added 2026-10-01): if a booking has started and its owner
+  hasn't been on the scheduler (presence signal) since its start within
+  20 minutes, the first 2 hours are removed (whole booking if <= 2 h;
+  otherwise it is replaced by one starting 2 h later, id gets "-t1",
+  "-t2"...). Trimmed bookings give only 10 minutes for the next part.
+  Runs once a minute in EVERY user's helper while plogenius is open
+  (the no-show's own helper isn't running), and before the card shows.
+  Changes use database preconditions so two helpers can't double-apply.
+  Note: someone who shows up late but before any helper checks keeps it.
   Back-to-back own bookings (added 2026-10-01): when your booking ends
   and your OWN next booking starts within a minute, the session simply
   carries on into it — no card, no log-out.

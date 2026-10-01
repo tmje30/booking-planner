@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Booking Planner – plogenius "in use" signal
 // @namespace    https://tmje30.github.io/booking-planner/
-// @version      1.14.0
+// @version      1.15.0
 // @description  Shows the Booking Planner status when plogenius.com opens, and tells the planner who is using it.
 // @match        https://plogenius.com/*
 // @match        https://*.plogenius.com/*
@@ -46,8 +46,15 @@
 //    NOT log you out of plogenius itself), or "Start scheduler" when you're
 //    not in one (opens the booking card).
 //
+// 5. No-show rule: once a minute it checks everyone's bookings. If a
+//    booking has started and its owner hasn't been on the scheduler within
+//    20 minutes, the first 2 hours of that booking are removed. For what's
+//    left, the owner gets 10 minutes after each next 2-hour part starts,
+//    or that part is removed too. (It runs in everyone's helper, because a
+//    no-show's own helper isn't running.)
+//
 // It sends ONLY your chosen name, the time, and bookings you make from the
-// card. It does not read anything from the plogenius page.
+// card (plus no-show removals). It does not read anything from the plogenius page.
 //
 // The @lines at the top are instructions for Tampermonkey: which sites to
 // run on (@match), what it's allowed to do (@grant), which server it may
@@ -77,6 +84,9 @@
   const IDLE_CHECK_EVERY_MS = 30 * 1000;      // how often we check for idleness
   const QUARTER_HOUR_MS = 15 * 60 * 1000;
   const HOUR_MS = 60 * 60 * 1000;
+  const NO_SHOW_FIRST_GRACE_MS = 20 * 60 * 1000; // owner must show up within 20 min of the start
+  const NO_SHOW_NEXT_GRACE_MS = 10 * 60 * 1000;  // ...and within 10 min of each next 2-hour part
+  const NO_SHOW_PART_MS = 2 * HOUR_MS;           // a no-show removes 2 hours at a time
 
   const DOCS_PATH = "projects/" + PROJECT_ID + "/databases/(default)/documents";
   const API_BASE = "https://firestore.googleapis.com/v1/";
@@ -273,6 +283,12 @@
         lastSeenMs: readTime(doc.fields.lastSeen),
       }))
       .filter((p) => now - p.lastSeenMs < IN_USE_TIMEOUT_MS);
+    // When each user last sent a signal, even if that's long ago
+    // (used by the no-show rule). Logged-out users have no entry.
+    const lastSeenByUser = {};
+    for (const doc of presence.documents || []) {
+      lastSeenByUser[doc.fields.user.stringValue] = readTime(doc.fields.lastSeen);
+    }
     const upcomingBookings = (bookings.documents || [])
       .map((doc) => ({
         id: doc.name.split("/").pop(), // the document's name is the booking id
@@ -282,7 +298,7 @@
       }))
       .filter((b) => b.endMs > now)
       .sort((a, b) => a.startMs - b.startMs);
-    return { activeUsers, upcomingBookings };
+    return { activeUsers, upcomingBookings, lastSeenByUser };
   }
 
   // Send one "still here" signal: write to the document presence/<name>.
@@ -332,6 +348,69 @@
       API_BASE + DOCS_PATH + "/bookings/" + bookingId + "?updateMask.fieldPaths=endMs",
       { fields: { endMs: { integerValue: String(newEndMs) } } });
   }
+
+  // ---------- No-show rule ----------
+  //
+  // A booking whose first 2 hours were removed for a no-show gets "-t1"
+  // added to its id (then "-t2", ...). That's how we know its owner gets
+  // only 10 minutes (not 20) for the next part.
+
+  function timesTrimmed(bookingId) {
+    const match = bookingId.match(/-t(\d+)$/);
+    return match ? Number(match[1]) : 0;
+  }
+
+  // Check every booking that has started. Runs once a minute in every
+  // open plogenius window of every user, so it doesn't matter whose.
+  async function checkNoShows() {
+    let status;
+    try {
+      status = await loadPlannerStatus();
+    } catch (error) {
+      return; // no internet: try again next minute
+    }
+    const now = Date.now();
+    for (const booking of status.upcomingBookings) {
+      const grace = timesTrimmed(booking.id) > 0 ? NO_SHOW_NEXT_GRACE_MS : NO_SHOW_FIRST_GRACE_MS;
+      if (now < booking.startMs + grace) continue;   // not late yet
+      const lastSeen = status.lastSeenByUser[booking.user] || 0;
+      if (lastSeen >= booking.startMs) continue;      // the owner has been on since it started
+      await removeFirstPart(booking);
+    }
+  }
+
+  // Remove the first 2 hours of a booking (the whole booking if it's 2
+  // hours or shorter). Several helpers may try this at the same moment, so
+  // every change says "only if the booking is still exactly as I saw it";
+  // the first one wins and the others are refused harmlessly.
+  async function removeFirstPart(booking) {
+    const oldName = DOCS_PATH + "/bookings/" + booking.id;
+    const newStartMs = booking.startMs + NO_SHOW_PART_MS;
+    try {
+      if (newStartMs >= booking.endMs) {
+        // 2 hours or less: delete the whole booking.
+        await firestoreRequest("DELETE", API_BASE + oldName + "?currentDocument.exists=true");
+      } else {
+        // Longer: replace it with a booking that starts 2 hours later.
+        // "Commit" = both changes happen together, or neither does.
+        const newId = booking.id.replace(/-t\d+$/, "") + "-t" + (timesTrimmed(booking.id) + 1);
+        await firestoreRequest("POST", API_BASE + DOCS_PATH + ":commit", { writes: [
+          { update: { name: DOCS_PATH + "/bookings/" + newId, fields: {
+              user: { stringValue: booking.user },
+              startMs: { integerValue: String(newStartMs) },
+              endMs: { integerValue: String(booking.endMs) },
+            } },
+            currentDocument: { exists: false } },
+          { delete: oldName, currentDocument: { exists: true } },
+        ] });
+      }
+      console.info("[Booking Planner] no-show: removed up to 2 hours of", booking.user + "'s booking");
+    } catch (error) {
+      // Someone else's helper already did it (or no internet). Fine.
+    }
+  }
+
+  setInterval(checkNoShows, 60 * 1000);
 
   // ---------- Booking choices (used on both cards) ----------
 
@@ -875,8 +954,9 @@
   // if this computer hasn't chosen one yet).
   const savedName = GM_getValue("userName", null);
   if (USERS.some((u) => u.name === savedName)) {
-    showStatusCard(savedName, null, true);
+    // Tidy up no-shows first, so the card shows the real situation.
+    checkNoShows().finally(() => showStatusCard(savedName, null, true));
   } else {
-    showNamePicker((name) => showStatusCard(name, null, true));
+    showNamePicker((name) => checkNoShows().finally(() => showStatusCard(name, null, true)));
   }
 })();
