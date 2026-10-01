@@ -68,7 +68,7 @@ only save bookings on each person's own computer, so we need shared storage.
   Menu button (added 2026-09-30): the helper adds a button after "VIP" in
   plogenius's top menu. In a session: "⏻ Log out scheduler" = quietly mark
   plogenius as free in the planner (no card; does NOT log out of
-  plogenius). Not in a session: "▶ Start session" = open the booking
+  plogenius). Not in a session: "▶ Start scheduler" = open the booking
   card. It re-adds itself if plogenius redraws its menu.
   No card during your own booking (added 2026-09-30): opening plogenius
   (e.g. an extra window) during your own booked time, with nobody else on
